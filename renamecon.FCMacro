@@ -1,0 +1,18 @@
+d=App.getDocument('EDI_with_parts')
+for s in d.Objects:
+	if s.TypeId == 'Sketcher::SketchObject' :
+		if hasattr(sketch, 'Constraints'):
+		    # Loop through constraints by index to rename them safely
+		    for i, constraint in enumerate(s.Constraints):
+		        if constraint.Name:
+		            new_name = constraint.Name.replace('-', '_')
+		            print(new_name )
+		            # Only apply if the name actually contains a hyphen
+		            if new_name != constraint.Name:
+		                print(f"Renaming constraint {i}: '{constraint.Name}' -> '{new_name}'")
+		                s.renameConstraint(i, new_name)
+		    # Recompute to apply changes
+		    App.ActiveDocument.recompute()
+		    print("Constraint renaming complete.")
+		else:
+		    print("Selected object is not a sketch or has no constraints.")

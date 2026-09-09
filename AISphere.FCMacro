@@ -1,0 +1,128 @@
+import FreeCAD as App
+import Part
+import math
+
+# Create a clean new document
+doc = App.newDocument("IR_Rain_Sensor_Perfect_Square")
+
+# --- PARAMETERS (In Millimeters) ---
+dome_outer_diameter = 127.0  # 5 inches
+dome_wall_thickness = 3.0
+heightened_section_height = 14.38
+diode_hole_diameter = 5.0    
+angle_tilt = 45.0            
+diode_circle_radius = 45.0   
+
+# Derived dimensions
+outer_radius = dome_outer_diameter / 2.0
+inner_radius = outer_radius - dome_wall_thickness
+
+# --- 1. CREATE OUTER DOME SHAPE ---
+out_sph = Part.makeSphere(outer_radius)
+out_cyl = Part.makeCylinder(outer_radius, heightened_section_height)
+out_cyl.translate(App.Vector(0, 0, -heightened_section_height))
+outer_solid = out_sph.fuse(out_cyl)
+
+in_sph = Part.makeSphere(inner_radius)
+in_cyl = Part.makeCylinder(inner_radius, heightened_section_height + 5.0)
+in_cyl.translate(App.Vector(0, 0, -heightened_section_height - 2.0))
+inner_solid = in_sph.fuse(in_cyl)
+
+dome_shell = outer_solid.cut(inner_solid)
+
+cutter = Part.makeBox(outer_radius*3, outer_radius*3, outer_radius*2)
+cutter.translate(App.Vector(-outer_radius*1.5, -outer_radius*1.5, -outer_radius*2 - heightened_section_height))
+final_dome = dome_shell.cut(cutter)
+
+dome_obj = doc.addObject("Part::Feature", "Acrylic_Heightened_Dome")
+dome_obj.Shape = final_dome
+dome_obj.ViewObject.Transparency = 85 
+dome_obj.ViewObject.ShapeColor = (0.7, 0.9, 1.0)
+
+# --- 2. CREATE INTERNAL ELECTRONICS MOUNTING BASE ---
+mount_plate = Part.makeCylinder(inner_radius - 0.5, 3.0)
+mount_plate.translate(App.Vector(0, 0, -3.0))
+
+# --- 3. THE COMPONENT MATRIX (Rotational Alternating Layout) ---
+# Perfect alternating positions at 45-degree intervals.
+# Aim angles are calibrated precisely to face their target across the 135-degree step.
+components = [
+    {"name": "LED_1", "angle": 0,   "aim_angle": 135}, 
+    {"name": "PD_4",  "angle": 45,  "aim_angle": 225}, 
+    {"name": "LED_2", "angle": 90,  "aim_angle": 225}, 
+    {"name": "PD_3",  "angle": 135, "aim_angle": 315}, 
+    {"name": "LED_3", "angle": 180, "aim_angle": 315}, 
+    {"name": "PD_2",  "angle": 225, "aim_angle": 45},  
+    {"name": "LED_4", "angle": 270, "aim_angle": 45},  
+    {"name": "PD_1",  "angle": 315, "aim_angle": 135}  
+]
+
+coords = {}
+
+for comp in components:
+    ang_rad = math.radians(comp["angle"])
+    x = diode_circle_radius * math.cos(ang_rad)
+    y = diode_circle_radius * math.sin(ang_rad)
+    pos = App.Vector(x, y, 0.0)
+    coords[comp["name"]] = pos
+    
+    # Generate component placeholders
+    diode = Part.makeCylinder(diode_hole_diameter / 2.0, 10.0)
+    diode.translate(App.Vector(0, 0, -5.0))
+    
+    aim_rad = math.radians(comp["aim_angle"])
+    aim_x = math.cos(aim_rad)
+    aim_y = math.sin(aim_rad)
+    
+    rot_axis = App.Vector(-aim_y, aim_x, 0)
+    if rot_axis.Length > 0:
+        diode.rotate(App.Vector(0,0,0), rot_axis, angle_tilt)
+    diode.translate(pos)
+    
+    mount_plate = mount_plate.cut(diode)
+    
+    ref_obj = doc.addObject("Part::Feature", comp["name"])
+    ref_obj.Shape = diode
+    if "LED" in comp["name"]:
+        ref_obj.ViewObject.ShapeColor = (1.0, 0.0, 0.0) 
+    else:
+        ref_obj.ViewObject.ShapeColor = (0.0, 0.0, 1.0) 
+
+mount_obj = doc.addObject("Part::Feature", "Internal_Mounting_Plate")
+mount_obj.Shape = mount_plate
+mount_obj.ViewObject.ShapeColor = (0.3, 0.3, 0.3)
+
+# --- 4. RENDER INDEPENDENT, MATHEMATICALLY EQUAL CHORDS ---
+# Re-indexed pairs to enforce exact 135-degree angular separation
+beam_pairs = [
+    {"led": "LED_1", "pd": "PD_3", "color": (1.0, 0.2, 0.2)}, # Channel 1: Red Beam (0 to 135)
+    {"led": "LED_2", "pd": "PD_2", "color": (0.2, 1.0, 0.2)}, # Channel 2: Green Beam (90 to 225)
+    {"led": "LED_3", "pd": "PD_1", "color": (1.0, 1.0, 0.2)}, # Channel 3: Yellow Beam (180 to 315)
+    {"led": "LED_4", "pd": "PD_4", "color": (1.0, 0.2, 1.0)}  # Channel 4: Magenta Beam (270 to 45)
+]
+
+for idx, pair in enumerate(beam_pairs):
+    start = coords[pair["led"]]
+    end = coords[pair["pd"]]
+    
+    mid_x = (start.x + end.x) / 2.0
+    mid_y = (start.y + end.y) / 2.0
+    chord_length = math.sqrt((end.x - start.x)**2 + (end.y - start.y)**2)
+    beam_peak_z = (chord_length / 2.0) * math.tan(math.radians(angle_tilt))
+    bounce_point = App.Vector(mid_x, mid_y, beam_peak_z)
+    
+    seg1 = Part.makeLine(start, bounce_point)
+    seg2 = Part.makeLine(bounce_point, end)
+    beam_path_wire = Part.Wire([seg1, seg2])
+    
+    circle_profile = Part.makeCircle(0.4, start, App.Vector(bounce_point.x - start.x, bounce_point.y - start.y, bounce_point.z - start.z))
+    profile_wire = Part.Wire([circle_profile])
+    beam_pipe = beam_path_wire.makePipeShell([profile_wire], True, False)
+    
+    beam_obj = doc.addObject("Part::Feature", f"Infrared_Beam_Path_{idx+1}")
+    beam_obj.Shape = beam_pipe
+    beam_obj.ViewObject.ShapeColor = pair["color"]
+    beam_obj.ViewObject.Transparency = 30 
+
+doc.recompute()
+App.Gui.activeDocument().activeView().viewIsometric()

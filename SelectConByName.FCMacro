@@ -1,0 +1,15 @@
+lbl = '_91'
+lbl1 = '_86'
+d=App.getDocument('EDI_with_parts')
+Gui.Selection.clearSelection()
+for s in d.Objects:
+	if s.TypeId == 'Sketcher::SketchObject' :
+		print(s.Label)
+		i=0
+		for c in s.Constraints:
+			if 'REF_' in c.Name :
+				if lbl in c.Name or lbl1 in c.Name   :
+					Gui.Selection.addSelection('EDI_with_parts','Body001',s.Name+ '.Constraint' +  str(i+1) ) 
+					s.setVirtualSpace(i, False )
+			i=i+1
+

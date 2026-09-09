@@ -1,0 +1,6 @@
+d=App.getDocument('EDI_with_parts')
+d.FileName
+import os
+(head, tail)=os.path.split(d.FileName)
+head=head+"/exports/"+tail
+head

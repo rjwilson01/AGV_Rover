@@ -1,0 +1,2 @@
+s = App.getDocument('EDI_with_parts').getObject('Sketch036')
+s.getEdge(665)

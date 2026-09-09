@@ -1,0 +1,13 @@
+Hide = False
+Hide = True
+d=App.getDocument('EDI_with_parts')
+for s in d.Objects:
+	if s.TypeId == 'Sketcher::SketchObject' :
+		Gui.Selection.clearSelection()
+		Gui.Selection.addSelection('EDI_with_parts',s.Name)
+		if s.Label == 'Electrical' :
+			Gui.runCommand('Std_ShowSelection',True)
+			print( s.Name, 'Show')
+		else :
+			Gui.runCommand('Std_HideSelection',True)
+			print( s.Name, 'Hide')

@@ -2,7 +2,7 @@ Hide = False
 Hide_Calc = False
 Hide_Prod = True
 Hide_Ref = True
-Hide_RefNameless = True
+Hide_RefNameless = False
 Hide = True
 DoAll= False
 # DoAll= True
@@ -39,10 +39,10 @@ for s in d.Objects:
 					case "Angle" | "Distance" | "DistanceY" | "DistanceX" | "Diameter" | "Radius":
 						if (c.Driving == 0) or (c.Name != ''):
 							s.setVirtualSpace(i, Hide_RefNameless )
-							print( i,'/',cnt,"Shown",c.Content)
+							print( i,'/',cnt,"Shownx",c.Content)
 						if 'Calc_' in c.Name :
 							s.setVirtualSpace(i, Hide_Calc )
-							print( i,'/',cnt,"Hidden",c.Content)
+							print( i,'/',cnt,"Hidden Calc",c.Content)
 						elif  'Prod_' in c.Name :
 							s.setVirtualSpace(i, Hide_Prod)
 							print( i,'/',cnt,"PROD Hidden",c.Content)

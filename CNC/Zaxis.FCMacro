@@ -1,0 +1,62 @@
+import FreeCAD as App
+import Part
+import math
+
+# Create a new document for the Servo Spindle Z-Axis Plate
+doc = App.newDocument("Phase2_Servo_Spindle_Z_Axis")
+
+# =============================================================================
+# PARAMETERS: SYNCHRONOUS SERVO SPINDLE PLATFORM (in mm)
+# =============================================================================
+z_plate_w = 180.0   # Expanded width to accommodate spindle cartridge + motor mounts
+z_plate_l = 350.0   # Longer stroke plate to distribute high cutting forces
+z_plate_h = 45.0    # Increased thickness (45mm) for structural rigidity in steel
+
+# SFU1605/2005 Ball Screw Central Clearance Trench
+screw_trench_w = 55.0   
+screw_trench_d = 25.0   
+
+# Spindle Cartridge / Quill Mounting Footprint (Heavy-duty block)
+# Assuming a standard 80mm-90mm industrial steel spindle cartridge housing
+cartridge_bore_r = 45.0  # 90mm diameter bore clearance if nested
+mount_bolt_r = 5.5       # Clearance for M10 structural bolts
+
+# =============================================================================
+# 1. BASE RIGID CARRIER BLOCK
+# =============================================================================
+z_box = Part.makeBox(z_plate_w, z_plate_l, z_plate_h)
+z_box.translate(App.Vector(-z_plate_w/2, -z_plate_l/2, -z_plate_h))
+z_shape = z_box
+
+# =============================================================================
+# 2. CUT CENTRAL BALL SCREW TRENCH
+# =============================================================================
+trench = Part.makeBox(screw_trench_w, z_plate_l + 10, screw_trench_d)
+trench.translate(App.Vector(-screw_trench_w/2, -(z_plate_l+10)/2, -screw_trench_d))
+z_shape = z_shape.cut(trench)
+
+# =============================================================================
+# 3. SPINDLE CARTRIDGE RIGID ANCHOR POINTS
+# =============================================================================
+# Creating heavy-duty mounting bolt patterns for the spindle block assembly
+bolt_spacing_x = 120.0
+bolt_spacing_y = 60.0
+
+mount_holes = [
+    App.Vector(-bolt_spacing_x/2, -z_plate_l/4 - bolt_spacing_y/2, 0),
+    App.Vector(bolt_spacing_x/2, -z_plate_l/4 - bolt_spacing_y/2, 0),
+    App.Vector(-bolt_spacing_x/2, -z_plate_l/4 + bolt_spacing_y/2, 0),
+    App.Vector(bolt_spacing_x/2, -z_plate_l/4 + bolt_spacing_y/2, 0)
+]
+
+for pos in mount_holes:
+    b_hole = Part.makeCylinder(mount_bolt_r, z_plate_h + 10)
+    b_hole.translate(App.Vector(pos.x, pos.y, -z_plate_h - 5))
+    z_shape = z_shape.cut(b_hole)
+
+# Create the Final Heavy Z-Axis Object
+z_obj = doc.addObject("Part::Feature", "Heavy_Servo_Spindle_Carriage")
+z_obj.Shape = z_shape
+z_obj.ViewObject.ShapeColor = (0.2, 0.3, 0.35)
+
+doc.recompute()

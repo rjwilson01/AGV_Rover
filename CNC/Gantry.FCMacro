@@ -1,0 +1,60 @@
+import FreeCAD as App
+import Part
+import math
+
+# Create a new document for Phase 3
+doc = App.newDocument("Phase3_Immobile_Gantry_Columns")
+
+# =============================================================================
+# PARAMETERS: IMMOBILE DUAL GANTRY PILLARS (in mm)
+# =============================================================================
+pillar_w = 120.0    # Width/thickness of each side pillar
+pillar_l = 250.0    # Depth (front-to-back stability footprint)
+pillar_h = 400.0    # Vertical height from the bed base
+
+# Central clearance gap between the two pillars for the Z/X axis assembly
+clearance_gap = 280.0 
+pillar_offset_x = (clearance_gap / 2) + (pillar_w / 2)
+
+# Stepped recess at the top to drop the immobile Gantry Bridge into
+bridge_seat_depth = 40.0
+bridge_seat_height = 80.0
+
+# =============================================================================
+# 1. LEFT GANTRY PILLAR
+# =============================================================================
+left_box = Part.makeBox(pillar_w, pillar_l, pillar_h)
+# Move to origin corner for cutting operations
+left_box.translate(App.Vector(-pillar_w/2, -pillar_l/2, 0))
+
+# Cut the top recess step for the bridge seating
+step_cut_l = Part.makeBox(bridge_seat_depth + 5, pillar_l + 10, bridge_seat_height + 5)
+step_cut_l.translate(App.Vector(-pillar_w/2 - 1, -pillar_l/2 - 5, pillar_h - bridge_seat_height))
+left_pillar_shape = left_box.cut(step_cut_l)
+
+# Position Left Pillar symmetrically in the assembly space
+left_pillar_shape.translate(App.Vector(-pillar_offset_x, 0, 0))
+
+left_obj = doc.addObject("Part::Feature", "Gantry_Pillar_Left")
+left_obj.Shape = left_pillar_shape
+left_obj.ViewObject.ShapeColor = (0.3, 0.3, 0.32)
+
+# =============================================================================
+# 2. RIGHT GANTRY PILLAR
+# =============================================================================
+right_box = Part.makeBox(pillar_w, pillar_l, pillar_h)
+right_box.translate(App.Vector(-pillar_w/2, -pillar_l/2, 0))
+
+# Cut the top recess step (mirrored internal face)
+step_cut_r = Part.makeBox(bridge_seat_depth + 5, pillar_l + 10, bridge_seat_height + 5)
+step_cut_r.translate(App.Vector(pillar_w/2 - bridge_seat_depth, -pillar_l/2 - 5, pillar_h - bridge_seat_height))
+right_pillar_shape = right_box.cut(step_cut_r)
+
+# Position Right Pillar symmetrically
+right_pillar_shape.translate(App.Vector(pillar_offset_x, 0, 0))
+
+right_obj = doc.addObject("Part::Feature", "Gantry_Pillar_Right")
+right_obj.Shape = right_pillar_shape
+right_obj.ViewObject.ShapeColor = (0.3, 0.3, 0.32)
+
+doc.recompute()

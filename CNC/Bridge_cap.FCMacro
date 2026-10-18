@@ -1,0 +1,59 @@
+import FreeCAD as App
+import Part
+import math
+
+# Create a new document for Phase 5
+doc = App.newDocument("Phase5_Gantry_Bridge")
+
+# =============================================================================
+# PARAMETERS: IMMOBILE GANTRY BRIDGE TIE-BAR (in mm)
+# =============================================================================
+# Must match the span established by the twin gantry pillars script
+clearance_gap = 280.0
+pillar_w = 120.0
+pillar_l = 250.0
+
+# Top pocket dimensions from the pillar script
+bridge_seat_depth = 40.0
+bridge_seat_height = 80.0
+
+# Total bridge length spans from the outside edge of the left pocket to the right pocket
+bridge_w = clearance_gap + (bridge_seat_depth * 2)
+bridge_l = pillar_l          # Matches the full depth of the gantry pillars
+bridge_h = bridge_seat_height # Sits flush with the top surface of the pillars
+
+# M12 Hardware Clearances for bolting into the pillar shoulders
+bridge_bolt_r = 7.0  # 14mm diameter clearance holes for M12 cap screws
+bolt_offset_y = 60.0 # Spaced away from the front and back edges
+
+# Calculate the X centerlines of the mounting pockets on both sides
+left_pocket_center_x = -(clearance_gap / 2 + bridge_seat_depth / 2)
+right_pocket_center_x = (clearance_gap / 2 + bridge_seat_depth / 2)
+
+# =============================================================================
+# 1. MAIN GANTRY BRIDGE BLOCK
+# =============================================================================
+bridge_box = Part.makeBox(bridge_w, bridge_l, bridge_h)
+bridge_box.translate(App.Vector(-bridge_w/2, -bridge_l/2, 0))
+bridge_shape = bridge_box
+
+# =============================================================================
+# 2. DRILL VERTICAL M12 ANCHOR BOLT HOLES
+# =============================================================================
+# Symmetric bolt positions over the left and right column seating pockets
+bolt_ys = [-bridge_l/2 + bolt_offset_y, bridge_l/2 - bolt_offset_y]
+bolt_xs = [left_pocket_center_x, right_pocket_center_x]
+
+for x_pos in bolt_xs:
+    for y_pos in bolt_ys:
+        # Create vertical clearance cylinders through the entire thickness of the bridge
+        bolt_tube = Part.makeCylinder(bridge_bolt_r, bridge_h + 10)
+        bolt_tube.translate(App.Vector(x_pos, y_pos, -5))
+        bridge_shape = bridge_shape.cut(bolt_tube)
+
+# Create final Gantry Bridge Object
+bridge_obj = doc.addObject("Part::Feature", "Gantry_Bridge_TieBar")
+bridge_obj.Shape = bridge_shape
+bridge_obj.ViewObject.ShapeColor = (0.35, 0.35, 0.38) # Matching gray aggregate tone
+
+doc.recompute()

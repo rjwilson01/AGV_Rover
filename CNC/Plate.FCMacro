@@ -1,0 +1,188 @@
+import FreeCAD as App
+import Part
+import math
+
+# Create a clean, updated document
+doc = App.newDocument("Countersunk_Perfect_Y_Table")
+
+# =============================================================================
+# FIXED DESIGN PARAMETERS (in mm)
+# =============================================================================
+plate_w = 200.0
+plate_l = 200.0
+plate_h = 55.0  
+
+# M12 Structural Steel T-Slot Dimensions (DIN 650 baseline parameters)
+tslot_w1, tslot_h1, tslot_w2, tslot_h2 = 25.0, 10.0, 14.0, 14.0
+tslot_depth = tslot_h1 + tslot_h2
+steel_thick = 4.0
+
+grid_count = 5
+grid_spacing = plate_l / (grid_count - 1)
+bottom_proud = 3.0
+
+# Compacted position parameters to shift the edge slots safely further inward
+edge_slot_offset_x = (plate_w / 2) - (tslot_w1 / 2) - steel_thick - 2.0
+
+# =============================================================================
+# 1. BASE SOLID EPOXY GRANITE VOLUME
+# =============================================================================
+base_box = Part.makeBox(plate_w, plate_l, plate_h)
+base_box.translate(App.Vector(-plate_w/2, -plate_l/2, -plate_h))
+eg_shape = base_box
+
+# =============================================================================
+# 2. STRUCTURAL STEEL INTERLINED M12 TRACKS
+# =============================================================================
+steel_group = doc.addObject("App::DocumentObjectGroup", "SteelSkeleton")
+
+# --- Center Metal T-Slot Track ---
+center_t_base = Part.makeBox(tslot_w1 + (steel_thick*2), plate_l, tslot_h1 + steel_thick)
+center_t_base.translate(App.Vector(-(tslot_w1 + (steel_thick*2))/2, -plate_l/2, -tslot_depth - steel_thick))
+center_t_neck = Part.makeBox(tslot_w2 + (steel_thick*2), plate_l, tslot_h2)
+center_t_neck.translate(App.Vector(-(tslot_w2 + (steel_thick*2))/2, -plate_l/2, -tslot_h2))
+center_metal_slot = center_t_base.fuse(center_t_neck)
+
+t_void_b1 = Part.makeBox(tslot_w1, plate_l + 10, tslot_h1)
+t_void_b1.translate(App.Vector(-tslot_w1/2, -(plate_l+10)/2, -tslot_depth))
+t_void_b2 = Part.makeBox(tslot_w2, plate_l + 10, tslot_h2 + 2)
+t_void_b2.translate(App.Vector(-tslot_w2/2, -(plate_l+10)/2, -tslot_h2))
+t_void = t_void_b1.fuse(t_void_b2)
+center_metal_track = center_metal_slot.cut(t_void)
+
+# --- Add Countersunk Bores into Bottom of Center T-Slot ---
+for j in range(grid_count):
+    y_pos = -plate_l/2 + (j * grid_spacing)
+    # Countersunk screw head clearance pocket
+    cs_pocket = Part.makeCylinder(6.0, 5.0)  # 12mm diameter countersink
+    cs_pocket.translate(App.Vector(0, y_pos, -tslot_depth))
+    # Screw shank through-hole
+    screw_shank = Part.makeCylinder(3.3, 15.0) # Clearance for M6 screw shank
+    screw_shank.translate(App.Vector(0, y_pos, -tslot_depth - 10.0))
+    center_metal_track = center_metal_track.cut(cs_pocket).cut(screw_shank)
+
+c_track_obj = doc.addObject("Part::Feature", "Center_Steel_T_Slot")
+c_track_obj.Shape = center_metal_track
+c_track_obj.ViewObject.ShapeColor = (0.7, 0.7, 0.72)
+steel_group.addObject(c_track_obj)
+eg_shape = eg_shape.cut(center_metal_slot)
+
+# --- Left and Right Structural Edge Tracks ---
+for side in [-1, 1]:
+    x_pos = side * edge_slot_offset_x
+    
+    ang_h = Part.makeBox(tslot_w1 + (steel_thick*2), plate_l, tslot_h1 + steel_thick)
+    ang_h.translate(App.Vector(-(tslot_w1 + (steel_thick*2))/2, -plate_l/2, -tslot_depth - steel_thick))
+    
+    ang_v = Part.makeBox(tslot_w2 + (steel_thick*2), plate_l, tslot_h2)
+    ang_v.translate(App.Vector(-(tslot_w2 + (steel_thick*2))/2, -plate_l/2, -tslot_h2))
+    
+    edge_track_solid = ang_h.fuse(ang_v)
+    
+    ev_void_b1 = Part.makeBox(tslot_w1, plate_l + 10, tslot_h1)
+    ev_void_b1.translate(App.Vector(-tslot_w1/2, -(plate_l+10)/2, -tslot_depth))
+    ev_void_b2 = Part.makeBox(tslot_w2, plate_l + 10, tslot_h2 + 2)
+    ev_void_b2.translate(App.Vector(-tslot_w2/2, -(plate_l+10)/2, -tslot_h2))
+    
+    edge_metal_track = edge_track_solid.cut(ev_void_b1.fuse(ev_void_b2))
+    
+    # --- Add Countersunk Bores into Bottom of Edge T-Slots ---
+    for j in range(grid_count):
+        y_pos = -plate_l/2 + (j * grid_spacing)
+        cs_pocket = Part.makeCylinder(6.0, 5.0)
+        cs_pocket.translate(App.Vector(0, y_pos, -tslot_depth))
+        screw_shank = Part.makeCylinder(3.3, 15.0)
+        screw_shank.translate(App.Vector(0, y_pos, -tslot_depth - 10.0))
+        edge_metal_track = edge_metal_track.cut(cs_pocket).cut(screw_shank)
+        
+    edge_metal_track.translate(App.Vector(x_pos, 0, 0))
+    granite_clear_box = edge_track_solid.translate(App.Vector(x_pos, 0, 0))
+    eg_shape = eg_shape.cut(granite_clear_box)
+    
+    ca_obj = doc.addObject("Part::Feature", f"Edge_Track_{'Left' if side == -1 else 'Right'}")
+    ca_obj.Shape = edge_metal_track
+    ca_obj.ViewObject.ShapeColor = (0.65, 0.65, 0.68)
+    steel_group.addObject(ca_obj)
+
+# =============================================================================
+# 3. CLOSED-GAP HORIZONTAL SKELETON PLATES
+# =============================================================================
+# Recalculated width to seal the remaining open space gaps completely
+flat_plate_span_w = abs(edge_slot_offset_x) - (tslot_w1 / 2) - steel_thick - 1.0
+grid_z_position = -tslot_depth - steel_thick
+
+for j in range(grid_count):
+    y_pos = -plate_l/2 + (j * grid_spacing)
+    
+    if j > 0 and j < (grid_count - 1):
+        for side in [-1, 1]:
+            flat_plate = Part.makeBox(flat_plate_span_w, 20.0, steel_thick)
+            
+            # Position the plates horizontally to eliminate any remaining edge gaps
+            x_center = side * (abs(edge_slot_offset_x) / 2 + 6.0)
+            flat_plate.translate(App.Vector(-flat_plate_span_w/2, -10.0, grid_z_position - steel_thick))
+            flat_plate.translate(App.Vector(x_center, y_pos, 0))
+            
+            # Drill corresponding threaded holes in plates to match the countersunk tracks
+            p_tap_hole = Part.makeCylinder(3.0, steel_thick + 5)
+            p_tap_hole.translate(App.Vector(side * edge_slot_offset_x, y_pos, grid_z_position - steel_thick - 2))
+            flat_plate = flat_plate.cut(p_tap_hole)
+            
+            gp_obj = doc.addObject("Part::Feature", f"Horizontal_Skeleton_Plate_{j}_{'L' if side==-1 else 'R'}")
+            gp_obj.Shape = flat_plate
+            gp_obj.ViewObject.ShapeColor = (0.7, 0.7, 0.7)
+            steel_group.addObject(gp_obj)
+
+# Diagonal Brace matching lower reinforcement clearance tier
+diag_len = math.sqrt((plate_w - 50)**2 + (plate_l - 20)**2)
+diag_angle = math.degrees(math.atan2(plate_l - 20, plate_w - 50))
+diag_plate = Part.makeBox(diag_len, 20.0, steel_thick)
+diag_plate.translate(App.Vector(0, -10.0, grid_z_position - (steel_thick * 2.5)))
+diag_plate.rotate(App.Vector(0,0,0), App.Vector(0,0,1), diag_angle)
+diag_plate.translate(App.Vector(-plate_w/2 + 25, -plate_l/2 + 10, 0))
+
+diag_obj = doc.addObject("Part::Feature", "Diagonal_Brace")
+diag_obj.Shape = diag_plate
+diag_obj.ViewObject.ShapeColor = (0.55, 0.55, 0.7)
+steel_group.addObject(diag_obj)
+
+# =============================================================================
+# 4. HOLE DRILLING (Clearance tubes for HGR25 block alignment bolts)
+# =============================================================================
+bearing_bolt_xs = [-85.0, -35.0, 35.0, 85.0]
+bearing_bolt_ys = [-90.0, -50.0, 50.0, 90.0]
+for x_pos in bearing_bolt_xs:
+    for y_pos in bearing_bolt_ys:
+        tube = Part.makeCylinder(3.5, plate_h + 20)
+        tube.translate(App.Vector(x_pos, y_pos, -plate_h - 10))
+        eg_shape = eg_shape.cut(tube)
+
+# =============================================================================
+# 5. UNIFIED INVERTED T-SHAPED REINFORCING PLATES (3mm Proud Rail Datums)
+# =============================================================================
+bottom_group = doc.addObject("App::DocumentObjectGroup", "HGR25_Bottom_Rails")
+track_xs = [-60.0, 60.0]
+track_width = 40.0
+
+for idx, x_pos in enumerate(track_xs):
+    b_top = Part.makeBox(track_width, plate_l, steel_thick)
+    b_top.translate(App.Vector(-track_width/2, -plate_l/2, -plate_h))
+    
+    b_bot = Part.makeBox(track_width - 10.0, plate_l, bottom_proud)
+    b_bot.translate(App.Vector(-(track_width - 10.0)/2, -plate_l/2, -plate_h - bottom_proud))
+    
+    unified_track_plate = b_top.fuse(b_bot)
+    unified_track_plate.translate(App.Vector(x_pos, 0, 0))
+    
+    bp_obj = doc.addObject("Part::Feature", f"Unified_Bottom_Track_{idx+1}")
+    bp_obj.Shape = unified_track_plate
+    bp_obj.ViewObject.ShapeColor = (0.4, 0.4, 0.42)
+    bottom_group.addObject(bp_obj)
+
+# Finalize the main epoxy granite envelope shape output
+eg_final_obj = doc.addObject("Part::Feature", "Epoxy_Granite_Matrix")
+eg_final_obj.Shape = eg_shape
+eg_final_obj.ViewObject.ShapeColor = (0.18, 0.18, 0.18)
+eg_final_obj.ViewObject.Transparency = 50  
+
+doc.recompute()

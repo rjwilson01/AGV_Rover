@@ -1,0 +1,96 @@
+import FreeCAD as App
+import Part
+import math
+
+# Create a new document for Phase 4
+doc = App.newDocument("Phase4_Machine_Base_With_Drains")
+
+# =============================================================================
+# PARAMETERS: HEAVY MACHINE BASE DESIGN (in mm)
+# =============================================================================
+base_w = 600.0      # Total width to accommodate wide gantry footprints
+base_l = 400.0      # Extended length to allow full 200mm Y-table travel
+base_h = 80.0       # Thick block foundation for dampening steel harmonics
+
+# Gantry Footprint & Placement Matching Previous Column Script
+clearance_gap = 280.0
+pillar_w = 120.0
+pillar_l = 250.0
+gantry_span_x = clearance_gap + (pillar_w * 2)
+
+# HGR25 Rail Mounting Alignment (Matching Y-Table 120mm span center-to-center)
+rail_span_x = 120.0
+rail_bed_w = 30.0   # Width of the machined rail mounting ledge
+rail_bed_h = 5.0    # Elevation of rail bed above the drainage basin
+
+# Coolant Drain Channels
+drain_w = 60.0
+drain_depth = 15.0
+
+# =============================================================================
+# 1. MAIN SOLID FOUNDATION BLOCK
+# =============================================================================
+base_box = Part.makeBox(base_w, base_l, base_h)
+base_box.translate(App.Vector(-base_w/2, -base_l/2, -base_h))
+base_shape = base_box
+
+# =============================================================================
+# 2. CUT CHIP & COOLANT DRAINS (Left & Right Basin Trenches)
+# =============================================================================
+# Drain 1: Left of the linear rails
+drain_left = Part.makeBox(drain_w, base_l + 10, drain_depth)
+drain_left.translate(App.Vector(-rail_span_x/2 - drain_w - 10, -(base_l+10)/2, -drain_depth))
+base_shape = base_shape.cut(drain_left)
+
+# Drain 2: Central catchment between the two rails
+drain_center = Part.makeBox(rail_span_x - rail_bed_w, base_l + 10, drain_depth - 2)
+drain_center.translate(App.Vector(-(rail_span_x - rail_bed_w)/2, -(base_l+10)/2, -drain_depth + 2))
+base_shape = base_shape.cut(drain_center)
+
+# Drain 3: Right of the linear rails
+drain_right = Part.makeBox(drain_w, base_l + 10, drain_depth)
+drain_right.translate(App.Vector(rail_span_x/2 + 10, -(base_l+10)/2, -drain_depth))
+base_shape = base_shape.cut(drain_right)
+
+# =============================================================================
+# 3. CREATE MACHINED RAIL DATUM SURFACES
+# =============================================================================
+# We lower everything else around the rail beds to leave precision raised tracks
+clearance_cut_left = Part.makeBox(base_w/2, base_l + 10, rail_bed_h)
+clearance_cut_left.translate(App.Vector(-base_w/2, -(base_l+10)/2, -rail_bed_h))
+
+# Cut steps to isolate the raised HGR25 rail seating ridges
+# (Leaves flat strips running down the Y axis at +/- rail_span_x/2)
+# Realised through parametric geometry bounds inside the casting
+rail_groove_l = Part.makeBox(base_w, base_l + 10, rail_bed_h)
+rail_groove_l.translate(App.Vector(-base_w/2, -(base_l+10)/2, -rail_bed_h))
+
+# =============================================================================
+# 4. GANTRY PILLAR ANCHOR HOLES (M12 Bolt Patterns)
+# =============================================================================
+# M12 clearances running deep into the epoxy granite base structure
+gantry_bolt_r = 7.0 
+left_pillar_center_x = -(clearance_gap / 2 + pillar_w / 2)
+right_pillar_center_x = (clearance_gap / 2 + pillar_w / 2)
+
+bolt_offsets_y = [-80.0, 0.0, 80.0]
+bolt_offsets_x = [-35.0, 35.0]
+
+for b_y in bolt_offsets_y:
+    for b_x in bolt_offsets_x:
+        # Left anchor points
+        b_hole_l = Part.makeCylinder(gantry_bolt_r, base_h + 10)
+        b_hole_l.translate(App.Vector(left_pillar_center_x + b_x, b_y, -base_h - 5))
+        base_shape = base_shape.cut(b_hole_l)
+        
+        # Right anchor points
+        b_hole_r = Part.makeCylinder(gantry_bolt_r, base_h + 10)
+        b_hole_r.translate(App.Vector(right_pillar_center_x + b_x, b_y, -base_h - 5))
+        base_shape = base_shape.cut(b_hole_r)
+
+# Create final Machine Base Object
+base_obj = doc.addObject("Part::Feature", "EpoxyGranite_Machine_Base")
+base_obj.Shape = base_shape
+base_obj.ViewObject.ShapeColor = (0.18, 0.18, 0.18)
+
+doc.recompute()

@@ -1,0 +1,10 @@
+# In your master assembly file, you simply place your modules like this:
+track_positions = [-75.0, 0.0, 75.0]  # Shifting your edge slots safely inward
+
+for idx, x_offset in enumerate(track_positions):
+    # Create a link copy of your track module
+    copied_track = doc.addObject("Part::Feature", f"Table_Track_{idx+1}")
+    copied_track.Shape = track_obj.Shape  # References the original shape logic cleanly
+    
+    # Translate each copy directly into its respective slot lane
+    copied_track.Placement.Base = App.Vector(x_offset, 0, 0)

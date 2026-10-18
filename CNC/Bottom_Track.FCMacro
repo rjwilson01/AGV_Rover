@@ -1,0 +1,18 @@
+import FreeCAD as App
+import Part
+
+doc = App.newDocument("Bottom_Track")
+
+plate_l = 200.0
+steel_thick = 4.0
+bottom_proud = 3.0
+track_width = 40.0
+
+b_top = Part.makeBox(track_width, plate_l, steel_thick).translate(App.Vector(-track_width/2, -plate_l/2, -55.0))
+b_bot = Part.makeBox(track_width - 10.0, plate_l, bottom_proud).translate(App.Vector(-(track_width - 10.0)/2, -plate_l/2, -55.0 - bottom_proud))
+unified_track = b_top.fuse(b_bot)
+
+obj = doc.addObject("Part::Feature", "HGR25_Bottom_Track")
+obj.Shape = unified_track
+doc.recompute()
+doc.saveAs("C:/OneDrive/Documents/GitProjects/CNC/Bottom_Track.FCStd")

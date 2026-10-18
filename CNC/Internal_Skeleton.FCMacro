@@ -1,0 +1,67 @@
+import FreeCAD as App
+import Part
+import math
+
+# Force open a brand new clean file to erase old memory caches
+doc = App.newDocument("Internal_Skeleton")
+
+# =============================================================================
+# FIXED PHYSICAL DIMENSIONS (in mm)
+# =============================================================================
+tslot_depth = 24.0   # Total depth of the M12 T-slot rail profile
+steel_thick = 4.0
+
+# Position the internal plates flat right underneath the 24mm depth of the slots
+grid_z_position = -tslot_depth - steel_thick
+
+# Set a single, absolute width for the plates so they cannot be broken or split
+continuous_bar_width = 160.0  
+bar_thickness_y = 20.0
+
+skeleton_components = []
+
+# =============================================================================
+# 1. DRAW THREE SOLID CROSS PLATES (Unbroken, Single Blocks)
+# =============================================================================
+# Spaced out evenly along the length of the Y-axis
+y_positions = [-50.0, 0.0, 50.0]
+
+for idx, y_pos in enumerate(y_positions):
+    # Make a SINGLE solid box. No cuts, no loops, no left/right divisions.
+    cross_plate = Part.makeBox(continuous_bar_width, bar_thickness_y, steel_thick)
+    
+    # Center it on X and Y, and place it directly under the slots on Z
+    cross_plate.translate(App.Vector(-continuous_bar_width/2, -bar_thickness_y/2, grid_z_position))
+    cross_plate.translate(App.Vector(0, y_pos, 0))
+    
+    skeleton_components.append(cross_plate)
+
+# =============================================================================
+# 2. DRAW THE DIAGONAL SQUARING BRACE
+# =============================================================================
+diag_len = 240.0  # Generous length to ensure it reaches corner to corner
+diag_angle = 45.0 # True 45-degree brace
+
+diag_plate = Part.makeBox(diag_len, 15.0, steel_thick)
+# Position it on its own lower level (dropped down by an extra steel_thick)
+# This prevents it from colliding or intersecting with the 3 horizontal plates
+diag_plate.translate(App.Vector(-diag_len/2, -7.5, grid_z_position - steel_thick))
+diag_plate.rotate(App.Vector(0,0,0), App.Vector(0,0,1), diag_angle)
+
+skeleton_components.append(diag_plate)
+
+# =============================================================================
+# 3. COMPILING THE GEOMETRY
+# =============================================================================
+final_shape = skeleton_components[0]
+for part in skeleton_components[1:]:
+    final_shape = final_shape.fuse(part)
+
+# Bind the unified shape to the document object
+obj = doc.addObject("Part::Feature", "Steel_Skeleton_Grid")
+obj.Shape = final_shape
+
+doc.recompute()
+# Save directly into your OneDrive CAD drawing folder
+doc.saveAs("C:/OneDrive/Documents/GitProjects/CNC/Internal_Skeleton.FCStd")
+print("--- SUCCESS: Clean, unbroken skeleton drawing written to OneDrive ---")

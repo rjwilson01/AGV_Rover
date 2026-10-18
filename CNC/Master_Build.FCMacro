@@ -1,0 +1,85 @@
+import FreeCAD as App
+import Part
+import os
+
+doc = App.newDocument("Modular_Y_Table_Assembly")
+
+# Base Epoxy Granite Block Footprint Matrix
+plate_w, plate_l, plate_h = 200.0, 200.0, 55.0
+base_eg = Part.makeBox(plate_w, plate_l, plate_h)
+base_eg.translate(App.Vector(-plate_w/2, -plate_l/2, -plate_h))
+
+# Mapped explicitly to your local OneDrive directory structure
+cad_dir = "C:/OneDrive/Documents/GitProjects/CNC/"
+
+# =============================================================================
+# 1. PULL TOP WORKHOLDING HOUSING TRACKS
+# =============================================================================
+track_path = os.path.join(cad_dir, "M12_Track.FCStd")
+for idx, x_pos in enumerate([-75.0, 0.0, 75.0]):
+    temp_doc = App.open(track_path)
+    src_shape = temp_doc.getObject("M12_Track_Core").Shape
+    
+    # FIX: Use .copy() to make the geometry modifiable
+    local_shape_copy = src_shape.copy()
+    App.closeDocument("M12_Track")
+    
+    link = doc.addObject("Part::Feature", f"Top_T_Slot_{idx+1}")
+    link.Shape = local_shape_copy
+    link.Placement.Base = App.Vector(x_pos, 0, 0)
+    link.ViewObject.ShapeColor = (0.7, 0.7, 0.72)
+    
+    # Translate and cut safely using the unlocked copy
+    translated_envelope = local_shape_copy.copy()
+    translated_envelope.translate(App.Vector(x_pos, 0, 0))
+    base_eg = base_eg.cut(translated_envelope)
+
+# =============================================================================
+# 2. PULL SKELETON REINFORCEMENT INNER DRAWING
+# =============================================================================
+skeleton_path = os.path.join(cad_dir, "Internal_Skeleton.FCStd")
+temp_doc = App.open(skeleton_path)
+sk_shape = temp_doc.getObject("Steel_Skeleton_Grid").Shape
+local_sk_copy = sk_shape.copy()
+App.closeDocument("Internal_Skeleton")
+
+sk_link = doc.addObject("Part::Feature", "Internal_Reinforcement_Grid")
+sk_link.Shape = local_sk_copy
+sk_link.ViewObject.ShapeColor = (0.55, 0.55, 0.65)
+base_eg = base_eg.cut(local_sk_copy)
+
+# =============================================================================
+# 3. PULL STRUCTURAL LINEAR RAIL CHANNELS
+# =============================================================================
+bottom_track_path = os.path.join(cad_dir, "Bottom_Track.FCStd")
+for idx, x_pos in enumerate([-60.0, 60.0]):
+    temp_doc = App.open(bottom_track_path)
+    src_shape = temp_doc.getObject("HGR25_Bottom_Track").Shape
+    local_bottom_copy = src_shape.copy()
+    App.closeDocument("Bottom_Track")
+    
+    b_link = doc.addObject("Part::Feature", f"Linear_Rail_Datum_{idx+1}")
+    b_link.Shape = local_bottom_copy
+    b_link.Placement.Base = App.Vector(x_pos, 0, 0)
+    b_link.ViewObject.ShapeColor = (0.4, 0.4, 0.42)
+    
+    translated_bottom = local_bottom_copy.copy()
+    translated_bottom.translate(App.Vector(x_pos, 0, 0))
+    base_eg = base_eg.cut(translated_bottom)
+
+# =============================================================================
+# 4. EXTRUDE CLAMPING TUBE PASSAGES THROUGH MATRICES
+# =============================================================================
+for x_pos in [-85.0, -35.0, 35.0, 85.0]:
+    for y_pos in [-90.0, -50.0, 50.0, 90.0]:
+        tube = Part.makeCylinder(3.5, plate_h + 20).translate(App.Vector(x_pos, y_pos, -plate_h - 10))
+        base_eg = base_eg.cut(tube)
+
+# Finalize the main epoxy granite envelope shape output
+eg_final_obj = doc.addObject("Part::Feature", "Epoxy_Granite_Casting")
+eg_final_obj.Shape = base_eg
+eg_final_obj.ViewObject.ShapeColor = (0.18, 0.18, 0.18)
+eg_final_obj.ViewObject.Transparency = 50  
+
+doc.recompute()
+doc.saveAs("C:/OneDrive/Documents/GitProjects/CNC/Internal_Skeleton.FCStd")

@@ -52,7 +52,11 @@ mount_holes = [
 for pos in mount_holes:
     b_hole = Part.makeCylinder(mount_bolt_r, z_plate_h + 10)
     b_hole.translate(App.Vector(pos.x, pos.y, -z_plate_h - 5))
-    z_shape = z_shape.cut(b_hole)
+    z_shape = z_shape.cut(b_hole)file:///C:/Users/rjwil/LocalDocuments/GitProjects/FC Macros/CNC/Bottom_Track.FCMacro
+file:///C:/Users/rjwil/LocalDocuments/GitProjects/FC Macros/CNC/Internal_Skeleton.FCMacro
+file:///C:/Users/rjwil/LocalDocuments/GitProjects/FC Macros/CNC/M12_Track.FCMacro
+file:///C:/Users/rjwil/LocalDocuments/GitProjects/FC Macros/CNC/Master_Build.FCMacro
+
 
 # Create the Final Heavy Z-Axis Object
 z_obj = doc.addObject("Part::Feature", "Heavy_Servo_Spindle_Carriage")

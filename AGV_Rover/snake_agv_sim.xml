@@ -98,41 +98,43 @@
 	</worldbody>
 	<!-- 8 Spatial Tendons (4 per Ball Joint) with Inline Die-Spring Stiffness (150 N/mm) -->
 	<tendon>
-		<!-- Junction 1: T1 to T2 -->
-		<spatial name="tendon_j1_tl" width="0.005" material="cable_mat">
+		<!-- Pull-Pull Cables: Trailer 1 to Trailer 2 (t1_t2_xy) -->
+		<spatial name="t1_t2_tl" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t1_ftl"/>
 			<site site="j_t2_btl"/>
 		</spatial>
-		<spatial name="tendon_j1_tr" width="0.005" material="cable_mat">
+		<spatial name="t1_t2_tr" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t1_ftr"/>
 			<site site="j_t2_btr"/>
 		</spatial>
-		<spatial name="tendon_j1_bl" width="0.005" material="cable_mat">
+		<spatial name="t1_t2_bl" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t1_fbl"/>
 			<site site="j_t2_bbl"/>
 		</spatial>
-		<spatial name="tendon_j1_br" width="0.005" material="cable_mat">
+		<spatial name="t1_t2_br" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t1_fbr"/>
 			<site site="j_t2_bbr"/>
 		</spatial>
-		<!-- Junction 2: T2 to T3 -->
-		<spatial name="tendon_j2_tl" width="0.005" material="cable_mat">
+
+		<!-- Pull-Pull Cables: Trailer 2 to Trailer 3 (t2_t3_xy) -->
+		<spatial name="t2_t3_tl" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t2_ftl"/>
 			<site site="j_t3_btl"/>
 		</spatial>
-		<spatial name="tendon_j2_tr" width="0.005" material="cable_mat">
+		<spatial name="t2_t3_tr" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t2_ftr"/>
 			<site site="j_t3_btr"/>
 		</spatial>
-		<spatial name="tendon_j2_bl" width="0.005" material="cable_mat">
+		<spatial name="t2_t3_bl" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t2_fbl"/>
 			<site site="j_t3_bbl"/>
 		</spatial>
-		<spatial name="tendon_j2_br" width="0.005" material="cable_mat">
+		<spatial name="t2_t3_br" width="0.005" damping="200" material="cable_mat">
 			<site site="j_t2_fbr"/>
 			<site site="j_t3_bbr"/>
 		</spatial>
 	</tendon>
+
 	<actuator>
 		<!-- Standard Wheel Velocity Drives (6 wheels across 3 single-axle segments) -->
 		<velocity name="m_t1_l" joint="j_t1_l" kv="45"/>
@@ -141,14 +143,16 @@
 		<velocity name="m_t2_r" joint="j_t2_r" kv="35"/>
 		<velocity name="m_t3_l" joint="j_t3_l" kv="35"/>
 		<velocity name="m_t3_r" joint="j_t3_r" kv="35"/>
+
 		<!-- Capstan Position Actuators (Pull-only via force range [-6000, 0] N) -->
-		<position name="cap1_tl" tendon="t1_tl" kp="150000" forcerange="-6000 0"/>
-		<position name="cap1_tr" tendon="t1_tr" kp="150000" forcerange="-6000 0"/>
-		<position name="cap1_bl" tendon="t1_bl" kp="150000" forcerange="-6000 0"/>
-		<position name="cap1_br" tendon="t1_br" kp="150000" forcerange="-6000 0"/>
-		<position name="cap2_tl" tendon="t2_tl" kp="150000" forcerange="-6000 0"/>
-		<position name="cap2_tr" tendon="t2_tr" kp="150000" forcerange="-6000 0"/>
-		<position name="cap2_bl" tendon="t2_bl" kp="150000" forcerange="-6000 0"/>
-		<position name="cap2_br" tendon="t2_br" kp="150000" forcerange="-6000 0"/>
+		<position name="cap_t1_t2_tl" tendon="t1_t2_tl" kp="20000" kv="500" forcerange="-6000 0"/>
+		<position name="cap_t1_t2_tr" tendon="t1_t2_tr" kp="20000" kv="500" forcerange="-6000 0"/>
+		<position name="cap_t1_t2_bl" tendon="t1_t2_bl" kp="20000" kv="500" forcerange="-6000 0"/>
+		<position name="cap_t1_t2_br" tendon="t1_t2_br" kp="20000" kv="500" forcerange="-6000 0"/>
+
+		<position name="cap_t2_t3_tl" tendon="t2_t3_tl" kp="20000" kv="500" forcerange="-6000 0"/>
+		<position name="cap_t2_t3_tr" tendon="t2_t3_tr" kp="20000" kv="500" forcerange="-6000 0"/>
+		<position name="cap_t2_t3_bl" tendon="t2_t3_bl" kp="20000" kv="500" forcerange="-6000 0"/>
+		<position name="cap_t2_t3_br" tendon="t2_t3_br" kp="20000" kv="500" forcerange="-6000 0"/>
 	</actuator>
 </mujoco>

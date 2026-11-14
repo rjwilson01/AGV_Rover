@@ -12,7 +12,7 @@ except ImportError:
 
 # --- PARAMETRIC DIMENSIONS (mm) ---
 TRAILER_WIDTH = 500.0       # Width of AGV rear & trailer front reference plates
-PLATE_HEIGHT = 240.0        # Height of reference plates
+PLATE_HEIGHT = 360.0        # Height of reference plates
 PLATE_THICK = 10.0
 DRAWBAR_LEN = 350.0         # Length from each vehicle body to the ball joint center
 DRAWBAR_DIA = 50.0          # 50mm round drawbar tube
@@ -21,14 +21,13 @@ BALL_DIA = 55.0             # Central ball joint sphere
 # Electrical Hybrid Jumper Cable (Top-Center Loop)
 CLAMP_OFFSET = 200.0        # Distance from ball joint center to each electrical clamp
 CLAMP_HEIGHT = 32.0         # Clamp centerline height above drawbar center
-DEFAULT_CABLE_LEN = 500.0   # 500mm free-flexing electrical loop length (100mm slack over 400mm span)
 CABLE_DIA = 10.0            # 10mm OD hybrid robotic cable
 
 # Actively Tensioned 3mm Steel Pull-Pull Cables (Capstan Fairlead to Trailer Anchor)
 STEEL_CABLE_DIA = 3.0       # 3mm steel cable
 YAW_ANCHOR_Y = 250.0        # Left/Right anchor offset at max outer edges of 500mm plates
 YAW_ANCHOR_Z = 0.0          # Vertical offset for yaw cables
-PITCH_ANCHOR_Z = 155.0      # Top/Bottom anchor height
+PITCH_ANCHOR_Z = 155.0      # Top/Bottom pitch anchor height
 
 doc = App.ActiveDocument or App.newDocument("AGV_Capstan_PullPull_Sim")
 for obj in doc.Objects:
@@ -36,9 +35,9 @@ for obj in doc.Objects:
 
 # Create solid parts
 agv_plate = doc.addObject("Part::Feature", "AGV_Rear_Plate")
-agv_plate.Shape = Part.makeBox(PLATE_THICK, TRAILER_WIDTH, PLATE_HEIGHT * 1.5, App.Vector(-DRAWBAR_LEN - PLATE_THICK, -TRAILER_WIDTH/2, -PLATE_HEIGHT * 0.75))
+agv_plate.Shape = Part.makeBox(PLATE_THICK, TRAILER_WIDTH, PLATE_HEIGHT, App.Vector(-DRAWBAR_LEN - PLATE_THICK, -TRAILER_WIDTH/2, -PLATE_HEIGHT/2))
 agv_plate.ViewObject.ShapeColor = (0.20, 0.35, 0.55)
-agv_plate.ViewObject.Transparency = 55
+agv_plate.ViewObject.Transparency = 60
 
 agv_bar = doc.addObject("Part::Feature", "AGV_Drawbar_50mm")
 agv_bar.Shape = Part.makeCylinder(DRAWBAR_DIA/2, DRAWBAR_LEN, App.Vector(-DRAWBAR_LEN, 0, 0), App.Vector(1, 0, 0))
@@ -58,9 +57,9 @@ trailer_bar.Shape = Part.makeCylinder(DRAWBAR_DIA/2, DRAWBAR_LEN, App.Vector(0, 
 trailer_bar.ViewObject.ShapeColor = (0.35, 0.38, 0.42)
 
 trailer_plate = doc.addObject("Part::Feature", "Trailer_Front_Plate")
-trailer_plate.Shape = Part.makeBox(PLATE_THICK, TRAILER_WIDTH, PLATE_HEIGHT * 1.5, App.Vector(DRAWBAR_LEN, -TRAILER_WIDTH/2, -PLATE_HEIGHT * 0.75))
+trailer_plate.Shape = Part.makeBox(PLATE_THICK, TRAILER_WIDTH, PLATE_HEIGHT, App.Vector(DRAWBAR_LEN, -TRAILER_WIDTH/2, -PLATE_HEIGHT/2))
 trailer_plate.ViewObject.ShapeColor = (0.25, 0.55, 0.35)
-trailer_plate.ViewObject.Transparency = 55
+trailer_plate.ViewObject.Transparency = 60
 
 clamp_trl = doc.addObject("Part::Feature", "Clamp_Trailer_200mm")
 clamp_trl.Shape = Part.makeCylinder(12, 24, App.Vector(CLAMP_OFFSET - 12, 0, CLAMP_HEIGHT), App.Vector(1, 0, 0))
@@ -68,11 +67,19 @@ clamp_trl.ViewObject.ShapeColor = (0.15, 0.15, 0.15)
 
 # Electrical loop object (bright orange for clear inspection)
 elec_cable_obj = doc.addObject("Part::Feature", "Elec_Jumper_10mm")
-elec_cable_obj.ViewObject.ShapeColor = (0.95, 0.45, 0.05)
+elec_cable_obj.ViewObject.ShapeColor = (1.0, 0.42, 0.05)
 
-# 4 Tensioned Steel Pull-Pull cable objects
-steel_names = ["Yaw_Left_3mm", "Yaw_Right_3mm", "Pitch_Top_3mm", "Pitch_Bottom_3mm"]
-base_colors = [(0.85, 0.20, 0.20), (0.85, 0.20, 0.20), (0.15, 0.70, 0.85), (0.15, 0.70, 0.85)]
+# 6 Steel Pull-Pull cable objects: Yaw L/R + Twin Top Pitch L/R + Twin Bottom Pitch L/R
+steel_names = [
+    "Yaw_Left_3mm", "Yaw_Right_3mm",
+    "Pitch_Top_Left_3mm", "Pitch_Top_Right_3mm",
+    "Pitch_Bot_Left_3mm", "Pitch_Bot_Right_3mm"
+]
+base_colors = [
+    (0.85, 0.20, 0.20), (0.85, 0.20, 0.20),
+    (0.10, 0.75, 0.90), (0.10, 0.75, 0.90),
+    (0.15, 0.55, 0.85), (0.15, 0.55, 0.85)
+]
 steel_objs = []
 for name, col in zip(steel_names, base_colors):
     obj = doc.addObject("Part::Feature", name)
@@ -87,25 +94,27 @@ def build_elec_cable_shape(p0, t0, p1, t1, target_len, radius):
         profile = Part.Wire(Part.makeCircle(radius, p0, (p1 - p0).normalize()))
         return wire.makePipeShell([profile], True, True), 0.0
 
-    # Smooth 5-pole Bezier curve (prevents S-bend pinching at clamps)
-    low, high = 5.0, 400.0
+    # Smooth 5-pole Bezier curve (zero kinks/pinching)
+    low, high = 5.0, 350.0
     best_wire = None
-    best_h = 100.0
-    for _ in range(22):
-        h = 0.5 * (low + high)
-        tang_scale = max(45.0, chord * 0.28)
-        p_t0 = p0 + t0 * tang_scale
-        p_t1 = p1 + t1 * tang_scale
-        apex = (p0 + p1) * 0.5 + App.Vector(0, 0, h * 1.333)
+    best_h = 80.0
+    for _ in range(20):
+        mid = 0.5 * (low + high)
+        up = App.Vector(0, 0, 1)
+        p_t0 = p0 + t0 * (chord * 0.28)
+        p_t1 = p1 + t1 * (chord * 0.28)
+        p_top0 = p_t0 + up * mid
+        p_top1 = p_t1 + up * mid
         bs = Part.BSplineCurve()
-        bs.buildFromPoles([p0, p_t0, apex, p_t1, p1])
+        bs.buildFromPoles([p0, p_t0, p_top0, p_top1, p_t1, p1])
         wire = Part.Wire(bs.toShape())
         if wire.Length < target_len:
-            low = h
+            low = mid
         else:
-            high = h
+            high = mid
         best_wire = wire
-        best_h = (apex.z - 0.5 * (p0.z + p1.z)) * 0.75
+        best_h = mid * 0.78
+
     profile = Part.Wire(Part.makeCircle(radius, p0, t0))
     return best_wire.makePipeShell([profile], True, True), best_h
 
@@ -119,17 +128,17 @@ def build_taut_cable_shape(p0, p1, radius):
 class CableSimDialog(QtWidgets.QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("AGV Capstan Pull-Pull & Electrical Loop Sim (v3)")
+        self.setWindowTitle("AGV Capstan Pull-Pull & Electrical Loop Sim (v4)")
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
-        self.resize(410, 380)
+        self.resize(410, 390)
 
         layout = QtWidgets.QVBoxLayout(self)
 
         self.yaw_slider, self.yaw_lbl = self._make_slider(layout, "Yaw (Turn):", -90, 90, 0, "°")
         self.pitch_slider, self.pitch_lbl = self._make_slider(layout, "Pitch (Hill):", -30, 30, 0, "°")
         self.roll_slider, self.roll_lbl = self._make_slider(layout, "Roll (Tilt):", -30, 30, 0, "°")
-        self.len_slider, self.len_lbl = self._make_slider(layout, "Elec Loop Len:", 430, 650, int(DEFAULT_CABLE_LEN), " mm")
-        self.spread_slider, self.spread_lbl = self._make_slider(layout, "Pitch Y-Offset:", 0, 180, 65, " mm")
+        self.len_slider, self.len_lbl = self._make_slider(layout, "Elec Loop Len:", 430, 650, 500, " mm")
+        self.spread_slider, self.spread_lbl = self._make_slider(layout, "Pitch Y-Spread:", 0, 220, 75, " mm")
 
         self.info_lbl = QtWidgets.QLabel()
         self.info_lbl.setStyleSheet("font-weight: bold; padding: 8px; background: #222; color: #0f0; border-radius: 4px;")
@@ -143,8 +152,11 @@ class CableSimDialog(QtWidgets.QDialog):
         btn_row.addWidget(self.reset_btn)
         layout.addLayout(btn_row)
 
-        for s in (self.yaw_slider, self.pitch_slider, self.roll_slider, self.len_slider, self.spread_slider):
-            s.valueChanged.connect(self.on_slider_change)
+        self.yaw_slider.valueChanged.connect(self.on_slider_change)
+        self.pitch_slider.valueChanged.connect(self.on_slider_change)
+        self.roll_slider.valueChanged.connect(self.on_slider_change)
+        self.len_slider.valueChanged.connect(self.on_slider_change)
+        self.spread_slider.valueChanged.connect(self.on_slider_change)
         self.play_btn.toggled.connect(self.on_play_toggled)
         self.reset_btn.clicked.connect(self.on_reset)
 
@@ -152,12 +164,12 @@ class CableSimDialog(QtWidgets.QDialog):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.on_timer)
 
-        self.update_pose()
+        self.update_pose(0, 0, 0)
 
     def _make_slider(self, parent_layout, title, min_v, max_v, init_v, unit):
         row = QtWidgets.QHBoxLayout()
         lbl = QtWidgets.QLabel(f"{title} {init_v}{unit}")
-        lbl.setFixedWidth(135)
+        lbl.setFixedWidth(145)
         slider = QtWidgets.QSlider(Qt.Horizontal)
         slider.setRange(min_v, max_v)
         slider.setValue(init_v)
@@ -166,18 +178,15 @@ class CableSimDialog(QtWidgets.QDialog):
         parent_layout.addLayout(row)
         return slider, lbl
 
-    def update_pose(self):
-        yaw_deg = self.yaw_slider.value()
-        pitch_deg = self.pitch_slider.value()
-        roll_deg = self.roll_slider.value()
-        cable_len = float(self.len_slider.value())
-        pitch_y = float(self.spread_slider.value())
+    def update_pose(self, yaw_deg, pitch_deg, roll_deg):
+        elec_len = self.len_slider.value()
+        y_spread = self.spread_slider.value()
 
         self.yaw_lbl.setText(f"Yaw (Turn): {yaw_deg}°")
         self.pitch_lbl.setText(f"Pitch (Hill): {pitch_deg}°")
         self.roll_lbl.setText(f"Roll (Tilt): {roll_deg}°")
-        self.len_lbl.setText(f"Elec Loop Len: {int(cable_len)} mm")
-        self.spread_lbl.setText(f"Pitch Y-Offset: {int(pitch_y)} mm")
+        self.len_lbl.setText(f"Elec Loop Len: {elec_len} mm")
+        self.spread_lbl.setText(f"Pitch Y-Spread: ±{y_spread} mm")
 
         rot = App.Rotation(yaw_deg, pitch_deg, roll_deg)
         placement = App.Placement(App.Vector(0, 0, 0), rot)
@@ -185,21 +194,24 @@ class CableSimDialog(QtWidgets.QDialog):
         trailer_plate.Placement = placement
         clamp_trl.Placement = placement
 
-        # 1. Electrical Hybrid Jumper
+        # 1. Electrical Hybrid Jumper (Constant length, clamped at +/- 200mm)
         ep0 = App.Vector(-CLAMP_OFFSET, 0, CLAMP_HEIGHT)
         et0 = App.Vector(1, 0, 0)
         ep1 = placement.multVec(App.Vector(CLAMP_OFFSET, 0, CLAMP_HEIGHT))
         et1 = rot.multVec(App.Vector(-1, 0, 0))
         chord = ep0.distanceToPoint(ep1)
-        elec_shape, arch_h = build_elec_cable_shape(ep0, et0, ep1, et1, cable_len, CABLE_DIA / 2.0)
+        elec_shape, arch_h = build_elec_cable_shape(ep0, et0, ep1, et1, elec_len, CABLE_DIA / 2.0)
         elec_cable_obj.Shape = elec_shape
 
-        # 2. Four Actively Tensioned 3mm Steel Cables (Parallel Y-offset on Pitch cables)
+        # 2. Six Actively Tensioned 3mm Steel Cables:
+        # Yaw Left/Right at +/- 250mm, plus Twin Top & Bottom Pitch cables spread symmetrically at +/- y_spread
         anchors_local = [
-            (App.Vector(-DRAWBAR_LEN,  YAW_ANCHOR_Y, YAW_ANCHOR_Z), App.Vector(DRAWBAR_LEN,  YAW_ANCHOR_Y, YAW_ANCHOR_Z)),
-            (App.Vector(-DRAWBAR_LEN, -YAW_ANCHOR_Y, YAW_ANCHOR_Z), App.Vector(DRAWBAR_LEN, -YAW_ANCHOR_Y, YAW_ANCHOR_Z)),
-            (App.Vector(-DRAWBAR_LEN,  pitch_y,  PITCH_ANCHOR_Z),   App.Vector(DRAWBAR_LEN,  pitch_y,  PITCH_ANCHOR_Z)),
-            (App.Vector(-DRAWBAR_LEN, -pitch_y, -PITCH_ANCHOR_Z),   App.Vector(DRAWBAR_LEN, -pitch_y, -PITCH_ANCHOR_Z)),
+            (App.Vector(-DRAWBAR_LEN,  YAW_ANCHOR_Y, YAW_ANCHOR_Z), App.Vector(DRAWBAR_LEN,  YAW_ANCHOR_Y, YAW_ANCHOR_Z)),      # Yaw Left (+250)
+            (App.Vector(-DRAWBAR_LEN, -YAW_ANCHOR_Y, YAW_ANCHOR_Z), App.Vector(DRAWBAR_LEN, -YAW_ANCHOR_Y, YAW_ANCHOR_Z)),      # Yaw Right (-250)
+            (App.Vector(-DRAWBAR_LEN,  y_spread,  PITCH_ANCHOR_Z), App.Vector(DRAWBAR_LEN,  y_spread,  PITCH_ANCHOR_Z)),       # Pitch Top Left (+Y)
+            (App.Vector(-DRAWBAR_LEN, -y_spread,  PITCH_ANCHOR_Z), App.Vector(DRAWBAR_LEN, -y_spread,  PITCH_ANCHOR_Z)),       # Pitch Top Right (-Y)
+            (App.Vector(-DRAWBAR_LEN,  y_spread, -PITCH_ANCHOR_Z), App.Vector(DRAWBAR_LEN,  y_spread, -PITCH_ANCHOR_Z)),       # Pitch Bot Left (+Y)
+            (App.Vector(-DRAWBAR_LEN, -y_spread, -PITCH_ANCHOR_Z), App.Vector(DRAWBAR_LEN, -y_spread, -PITCH_ANCHOR_Z)),       # Pitch Bot Right (-Y)
         ]
 
         lengths = []
@@ -222,18 +234,18 @@ class CableSimDialog(QtWidgets.QDialog):
 
         doc.recompute()
 
-        status_line = f"WARNING - Clash: {', '.join(clash_names)}" if clash_names else "Clearance OK (No cable/tube clash)"
+        status_line = f"WARNING - Interference: {', '.join(clash_names)}" if clash_names else "Clearance OK (No cable/tube clash)"
         self.info_lbl.setStyleSheet(
             f"font-weight: bold; padding: 8px; background: #222; color: {'#ff4444' if clash_names else '#00ff66'}; border-radius: 4px;"
         )
         self.info_lbl.setText(
             f"{status_line}\n"
-            f"Clamp Chord: {chord:.0f} mm | Elec Arch: {arch_h:.0f} mm\n"
-            f"Yaw L/R: {lengths[0]:.0f} / {lengths[1]:.0f} mm | Pitch T/B: {lengths[2]:.0f} / {lengths[3]:.0f} mm"
+            f"Clamp Chord: {chord:.0f} mm | Elec Arch: {arch_h:.0f} mm | Slack: {elec_len - chord:.0f} mm\n"
+            f"Yaw L/R: {lengths[0]:.0f}/{lengths[1]:.0f} mm | Pitch Top: {lengths[2]:.0f}/{lengths[3]:.0f} mm"
         )
 
     def on_slider_change(self):
-        self.update_pose()
+        self.update_pose(self.yaw_slider.value(), self.pitch_slider.value(), self.roll_slider.value())
 
     def on_play_toggled(self, checked):
         if checked:
@@ -263,7 +275,7 @@ class CableSimDialog(QtWidgets.QDialog):
         for s in (self.yaw_slider, self.pitch_slider, self.roll_slider):
             s.blockSignals(False)
 
-        self.update_pose()
+        self.update_pose(yaw, pitch, roll)
         self.step += 1
 
     def closeEvent(self, event):

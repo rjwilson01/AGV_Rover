@@ -3,9 +3,9 @@ import mujoco.viewer
 import numpy as np
 import time
 
-# 3-Trailer Snake AGV: Single-Axle Articulated Segments + 2 Active 4-Tendon Ball Joints
+# 3-Trailer Pure 3-Axle Snake AGV (6 Drive Wheels Total, Zero Skids/Casters)
 XML = """
-<mujoco model="agv_3trailer_snake_v4">
+<mujoco model="agv_3trailer_snake_v7">
   <option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
 
   <visual>
@@ -33,7 +33,7 @@ XML = """
     <geom name="rut_2" type="box" pos="3.6 -0.30 0.030" size="0.40 0.25 0.030" euler="0 -6 0" material="paddock"/>
     <geom name="rut_3" type="box" pos="5.0  0.28 0.028" size="0.35 0.25 0.028" euler="4 0 0" material="paddock"/>
 
-    <!-- TRAILER 1 (LEAD POWERED AGV - Single Mid-Axle so it pivots cleanly as a snake) -->
+    <!-- TRAILER 1 (LEAD POWERED AGV - Single Mid-Axle Only) -->
     <body name="trailer_1" pos="0 0 0.32">
       <freejoint name="root_jnt"/>
       <geom type="box" size="0.45 0.25 0.12" mass="110" material="chassis_lead"/>
@@ -47,20 +47,18 @@ XML = """
       <site name="j1_a_bl" pos="-0.45  0.24 -0.165" size="0.015"/>
       <site name="j1_a_br" pos="-0.45 -0.24 -0.165" size="0.015"/>
 
-      <!-- BALL JOINT 1 at (-0.80, 0, 0) -> TRAILER 2 (CENTER TRAILER at -1.60) -->
+      <!-- BALL JOINT 1 -> TRAILER 2 (CENTER TRAILER) -->
       <body name="trailer_2" pos="-1.60 0 0">
         <joint name="ball_joint_1" type="ball" pos="0.80 0 0" damping="12"/>
         <geom type="sphere" pos="0.80 0 0" size="0.032" material="cable_mat"/>
         <geom type="capsule" fromto="0.80 0 0 0.45 0 0" size="0.025" material="drawbar"/>
         <geom type="box" size="0.45 0.25 0.12" mass="100" material="chassis_trl"/>
 
-        <!-- Front Anchor Sites J1 (on Trailer 2) -->
         <site name="j1_b_tl" pos="0.45  0.24  0.165" size="0.015"/>
         <site name="j1_b_tr" pos="0.45 -0.24  0.165" size="0.015"/>
         <site name="j1_b_bl" pos="0.45  0.24 -0.165" size="0.015"/>
         <site name="j1_b_br" pos="0.45 -0.24 -0.165" size="0.015"/>
 
-        <!-- Wheels T2 -->
         <body name="t2_l" pos="0  0.32 -0.14"><joint name="j_t2_l" type="hinge" axis="0 1 0"/><geom type="cylinder" size="0.18 0.05" euler="90 0 0" mass="8" material="tire"/></body>
         <body name="t2_r" pos="0 -0.32 -0.14"><joint name="j_t2_r" type="hinge" axis="0 1 0"/><geom type="cylinder" size="0.18 0.05" euler="90 0 0" mass="8" material="tire"/></body>
 
@@ -71,20 +69,18 @@ XML = """
         <site name="j2_a_bl" pos="-0.45  0.24 -0.165" size="0.015"/>
         <site name="j2_a_br" pos="-0.45 -0.24 -0.165" size="0.015"/>
 
-        <!-- BALL JOINT 2 at (-0.80, 0, 0) -> TRAILER 3 (REAR TRAILER at -1.60) -->
+        <!-- BALL JOINT 2 -> TRAILER 3 (REAR TRAILER) -->
         <body name="trailer_3" pos="-1.60 0 0">
           <joint name="ball_joint_2" type="ball" pos="0.80 0 0" damping="12"/>
           <geom type="sphere" pos="0.80 0 0" size="0.032" material="cable_mat"/>
           <geom type="capsule" fromto="0.80 0 0 0.45 0 0" size="0.025" material="drawbar"/>
           <geom type="box" size="0.45 0.25 0.12" mass="100" material="chassis_lead"/>
 
-          <!-- Front Anchor Sites J2 (on Trailer 3) -->
           <site name="j2_b_tl" pos="0.45  0.24  0.165" size="0.015"/>
           <site name="j2_b_tr" pos="0.45 -0.24  0.165" size="0.015"/>
           <site name="j2_b_bl" pos="0.45  0.24 -0.165" size="0.015"/>
           <site name="j2_b_br" pos="0.45 -0.24 -0.165" size="0.015"/>
 
-          <!-- Wheels T3 -->
           <body name="t3_l" pos="0  0.32 -0.14"><joint name="j_t3_l" type="hinge" axis="0 1 0"/><geom type="cylinder" size="0.18 0.05" euler="90 0 0" mass="8" material="tire"/></body>
           <body name="t3_r" pos="0 -0.32 -0.14"><joint name="j_t3_r" type="hinge" axis="0 1 0"/><geom type="cylinder" size="0.18 0.05" euler="90 0 0" mass="8" material="tire"/></body>
         </body>
@@ -106,7 +102,6 @@ XML = """
   </tendon>
 
   <actuator>
-    <!-- Standard Wheel Velocity Drives (6 wheels across 3 single-axle segments) -->
     <velocity name="m_t1_l" joint="j_t1_l" kv="45"/>
     <velocity name="m_t1_r" joint="j_t1_r" kv="45"/>
     <velocity name="m_t2_l" joint="j_t2_l" kv="40"/>
@@ -114,7 +109,6 @@ XML = """
     <velocity name="m_t3_l" joint="j_t3_l" kv="40"/>
     <velocity name="m_t3_r" joint="j_t3_r" kv="40"/>
 
-    <!-- Capstan Position Actuators (Pull-only via force range [-6000, 0] N) -->
     <position name="cap1_tl" tendon="t1_tl" kp="150000" forcerange="-6000 0"/>
     <position name="cap1_tr" tendon="t1_tr" kp="150000" forcerange="-6000 0"/>
     <position name="cap1_bl" tendon="t1_bl" kp="150000" forcerange="-6000 0"/>
@@ -150,32 +144,31 @@ def quat_to_euler(q):
 model = mujoco.MjModel.from_xml_string(XML)
 data = mujoco.MjData(model)
 
-# Neutral cable length = 0.700m minus 2mm preload (300 N baseline)
 for i in range(6, 14):
     data.ctrl[i] = 0.698
 
 signs = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
+cable_labels = ["J1_TL", "J1_TR", "J1_BL", "J1_BR", "J2_TL", "J2_TR", "J2_BL", "J2_BR"]
 path_history = []
-L_SEG = 0.80      # Half-segment distance from mid-axle to ball joint (m)
-TRACK_W = 0.64    # Wheel track width (m)
-WHEEL_R = 0.18    # Wheel radius (m)
+L_SEG = 0.80
+TRACK_W = 0.64
+WHEEL_R = 0.18
 
 with mujoco.viewer.launch_passive(model, data) as viewer:
     dist_traveled = 0.0
     last_print = time.time()
     interval_peak = 0.0
+    peak_cable = "None"
     turn_complete = False
 
     while viewer.is_running():
         step_start = time.time()
         t = data.time
 
-        # Measure lead AGV heading
-        _, _, lead_hdg = quat_to_euler(data.qpos[3:7])
-        lead_hdg_deg = np.rad2deg(lead_hdg)
+        lead_roll, lead_pitch, lead_yaw = quat_to_euler(data.qpos[3:7])
+        lead_hdg_deg = np.rad2deg(lead_yaw)
 
-        # Drive straight over ruts (t < 5.0s), then execute full 180 deg U-turn
-        v_center = 1.15  # m/s
+        v_center = 1.15
         if t < 5.0 or turn_complete:
             target_yaw = 0.0
         else:
@@ -198,7 +191,6 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
         y1 = lookup_yaw(0.40)
         y2 = lookup_yaw(2.00)
 
-        # Matched Ackermann differential wheel speeds for each segment
         seg_yaws = [y1, 0.5 * (y1 + y2), y2]
         for s_idx, psi in enumerate(seg_yaws):
             if abs(psi) < 1e-4:
@@ -210,29 +202,35 @@ with mujoco.viewer.launch_passive(model, data) as viewer:
             data.ctrl[2 * s_idx]     = wl
             data.ctrl[2 * s_idx + 1] = wr
 
-        # Simulated IR camera measured pitch & roll across Joint 1 and Joint 2
-        if USE_IR_CAMERA_FEEDBACK:
-            _, p1_m, r1_m = quat_to_euler(data.qpos[9:13])
-            _, p2_m, r2_m = quat_to_euler(data.qpos[15:19])
-        else:
-            p1_m = r1_m = p2_m = r2_m = 0.0
+        # Measured joint angles from ball joint quaternions
+        r1_m, p1_m, y1_m = quat_to_euler(data.qpos[9:13])
+        r2_m, p2_m, y2_m = quat_to_euler(data.qpos[15:19])
 
-        # Note -y1, -y2 sign match for rear-mounted trailers along -X
+        # Active pitch stabilization keeps lead AGV chassis level across the 3 axles
+        p1_cmd = -0.6 * lead_pitch + (p1_m if USE_IR_CAMERA_FEEDBACK else 0.0)
+        p2_cmd = (p2_m if USE_IR_CAMERA_FEEDBACK else 0.0)
+        r1_cmd = (r1_m if USE_IR_CAMERA_FEEDBACK else 0.0)
+        r2_cmd = (r2_m if USE_IR_CAMERA_FEEDBACK else 0.0)
+
+        # Positive y1/y2 aligns capstan pull with differential wheel steer direction
         for k, (ys, zs) in enumerate(signs):
-            data.ctrl[6 + k]  = calc_cable_len(-y1, p1_m, r1_m, ys, zs) - 0.002
-            data.ctrl[10 + k] = calc_cable_len(-y2, p2_m, r2_m, ys, zs) - 0.002
+            data.ctrl[6 + k]  = calc_cable_len(y1, p1_cmd, r1_cmd, ys, zs) - 0.002
+            data.ctrl[10 + k] = calc_cable_len(y2, p2_cmd, r2_cmd, ys, zs) - 0.002
 
         mujoco.mj_step(model, data)
         viewer.sync()
 
-        live_peak = float(np.max(np.abs(data.actuator_force[6:14])))
-        if live_peak > interval_peak:
-            interval_peak = live_peak
+        forces = np.abs(data.actuator_force[6:14])
+        idx_max = int(np.argmax(forces))
+        if forces[idx_max] > interval_peak:
+            interval_peak = float(forces[idx_max])
+            peak_cable = cable_labels[idx_max]
 
         if time.time() - last_print > 0.6:
             print(
-                f"t={t:4.1f}s | Hdg={lead_hdg_deg:+6.1f}° | J1={np.rad2deg(y1):+5.1f}° | J2={np.rad2deg(y2):+5.1f}° | "
-                f"Interval Peak={interval_peak:6.1f} N (Live={live_peak:6.1f} N)"
+                f"t={t:4.1f}s | Hdg={lead_hdg_deg:+6.1f}° | "
+                f"J1(cmd/meas)={np.rad2deg(y1):+5.1f}°/{np.rad2deg(y1_m):+5.1f}° | "
+                f"R1={np.rad2deg(r1_m):+4.1f}° | Peak={interval_peak:6.1f}N [{peak_cable}]"
             )
             interval_peak = 0.0
             last_print = time.time()

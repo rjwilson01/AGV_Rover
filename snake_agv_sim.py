@@ -4,6 +4,9 @@ import json
 import threading
 import time
 from pathlib import Path
+import socket, json
+
+
 
 import mujoco
 import mujoco.viewer
@@ -82,27 +85,44 @@ class PlotJugglerWSBridge:
         for ws in list(self.clients):
             asyncio.run_coroutine_threadsafe(ws.send(msg), self.loop)
 
+
+class PlotJugglerUDPBridge:
+    def __init__(self, host="127.0.0.1", port=9870):
+        self.addr = (host, port)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    def publish(self, payload_dict):
+        self.sock.sendto(json.dumps(payload_dict).encode("utf-8"), self.addr)
+
+
+
 def main():
     base_dir = Path(__file__).resolve().parent
     xml_path = base_dir / "snake_agv_sim.xml"
     model = mujoco.MjModel.from_xml_path(str(xml_path))
     data = mujoco.MjData(model)
 
-    bridge = PlotJugglerWSBridge(WS_HOST, WS_PORT)
+    bridge = PlotJugglerUDPBridge(WS_HOST, WS_PORT)
     if HAS_WS:
         print(f"PlotJuggler Bridge WebSocket server listening on ws://{WS_HOST}:{WS_PORT}")
     else:
         print("Warning: 'websockets' not installed (pip install websockets). Writing sim_log.csv only.")
 
     capstan_names = [
-        "cap1_tl", "cap1_tr", "cap1_bl", "cap1_br",
-        "cap2_tl", "cap2_tr", "cap2_bl", "cap2_br",
+        "cap_t1_t2_tl", "cap_t1_t2_tr", "cap_t1_t2_bl", "cap_t1_t2_br",
+        "cap_t2_t3_tl", "cap_t2_t3_tr", "cap_t2_t3_bl", "cap_t2_t3_br",
     ]
+
     tendon_names = [
-        "t1_tl", "t1_tr", "t1_bl", "t1_br",
-        "t2_tl", "t2_tr", "t2_bl", "t2_br",
+        "t1_t2_tl", "t1_t2_tr", "t1_t2_bl", "t1_t2_br",
+        "t2_t3_tl", "t2_t3_tr", "t2_t3_bl", "t2_t3_br",
     ]
-    wheel_names = ["m_t1_l", "m_t1_r", "m_t2_l", "m_t2_r", "m_t3_l", "m_t3_r"]
+
+    wheel_names = [
+        "m_t1_l", "m_t1_r",
+        "m_t2_l", "m_t2_r",
+        "m_t3_l", "m_t3_r",
+    ]
 
     for cname in capstan_names:
         data.actuator(cname).ctrl = 0.698

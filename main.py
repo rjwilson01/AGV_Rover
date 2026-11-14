@@ -27,6 +27,59 @@ WAYPOINTS = [
     [11.0, -1.5], [14.0, -1.5], [17.0, 0.0], [22.0, 0.0],
 ]
 
+def render_path_overlay(viewer, waypoints, lookahead_pt=None):
+    scn = viewer.user_scn
+    scn.ngeom = 0  # Clear previous frame's custom markers
+    identity_mat = np.eye(3).flatten()
+
+    # 1. Draw Waypoint Spheres (Yellow) & Connecting Path Capsules (Cyan)
+    for i, wp in enumerate(waypoints):
+        if scn.ngeom >= scn.maxgeom - 2:
+            break
+        # Waypoint sphere
+        mujoco.mjv_initGeom(
+            scn.geoms[scn.ngeom],
+            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+            size=[0.08, 0, 0],
+            pos=[wp[0], wp[1], 0.05],
+            mat=identity_mat,
+            rgba=[1.0, 0.85, 0.1, 0.9],
+        )
+        scn.ngeom += 1
+
+        # Segment line to next waypoint
+        if i < len(waypoints) - 1:
+            nxt = waypoints[i + 1]
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(
+                g,
+                type=mujoco.mjtGeom.mjGEOM_CAPSULE,
+                size=[0.015, 0, 0],
+                pos=[0, 0, 0],
+                mat=identity_mat,
+                rgba=[0.1, 0.8, 1.0, 0.7],
+            )
+            mujoco.mjv_connector(
+                g,
+                type=mujoco.mjtGeom.mjGEOM_CAPSULE,
+                width=0.015,
+                from_=[wp[0], wp[1], 0.04],
+                to=[nxt[0], nxt[1], 0.04],
+            )
+            scn.ngeom += 1
+
+    # 2. Draw Active Pure-Pursuit Lookahead Target (Bright Red/Orange Sphere)
+    if lookahead_pt is not None and scn.ngeom < scn.maxgeom:
+        mujoco.mjv_initGeom(
+            scn.geoms[scn.ngeom],
+            type=mujoco.mjtGeom.mjGEOM_SPHERE,
+            size=[0.11, 0, 0],
+            pos=[lookahead_pt[0], lookahead_pt[1], 0.15],
+            mat=identity_mat,
+            rgba=[1.0, 0.2, 0.1, 0.95],
+        )
+        scn.ngeom += 1
+
 
 def main():
     base_dir = Path(__file__).resolve().parent
@@ -46,7 +99,7 @@ def main():
 
             root_qpos = data.joint("root_jnt").qpos
             pos_xy = root_qpos[:2]
-            _, _, lead_hdg = quat_to_euler(root_qpos[3:7])
+            lead_hdg, _, _ = quat_to_euler(root_qpos[3:7])  # Index 0 is YAW!
 
             wheel_vels, y1, y2 = controller.step(pos_xy, lead_hdg, v_center=1.15)
             for w_name, w_vel in zip(WHEEL_NAMES, wheel_vels):
@@ -62,6 +115,9 @@ def main():
                 data.actuator(CAPSTAN_NAMES[4 + k]).ctrl = calc_cable_len(-y2, p2_ctrl, r2_ctrl, ys, zs) - 0.002
 
             mujoco.mj_step(model, data)
+
+            with viewer.lock():
+                render_path_overlay(viewer, WAYPOINTS, controller.last_lookahead)
             viewer.sync()
 
             forces = {

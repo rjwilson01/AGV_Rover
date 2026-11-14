@@ -44,7 +44,8 @@
 			<!-- ================= TRAILER 2 (CENTER TRAILER) ================= -->
 			<body name="trailer_2" pos="-1.60 0 0">
 				<!-- Ball Joint at +0.80 relative to T2 (matches -0.80 relative to T1) -->
-				<joint name="ball_joint_1" type="ball" pos="0.80 0 0" damping="12"/>
+				<joint name="ball_joint_1" type="ball" pos="0.80 0 0" damping="12" limited="true" range="0 45"/>
+
 				<geom name="hitch_1_ball" type="sphere" pos="0.80 0 0" size="0.032" material="cable_mat"/>
 				<!-- Drawbar T2 Front (Ball Joint +0.80 to Chassis front +0.45) -->
 				<geom name="t2_drawbar_front" type="capsule" fromto="0.80 0 0 0.45 0 0" size="0.025" material="drawbar"/>
@@ -77,7 +78,7 @@
 					<geom name="hitch_2_ball" type="sphere" pos="0.80 0 0" size="0.032" material="cable_mat"/>
 					<!-- Drawbar T3 Front (Ball Joint +0.80 to Chassis front +0.45) -->
 					<geom name="t3_drawbar_front" type="capsule" fromto="0.80 0 0 0.45 0 0" size="0.025" material="drawbar"/>
-					<geom name="t3_chassis" type="box" size="0.45 0.25 0.12" mass="100" material="chassis_lead"/>
+					<geom name="t3_chassis" type="box" size="0.45 0.25 0.12" mass="100" material="chassis_trl"/>
 					<!-- Junction T3 Front Sites (j_t3_bxy - connects to j_t2_fxy) -->
 					<site name="j_t3_btl" pos="0.45  0.24  0.165" size="0.015"/>
 					<site name="j_t3_btr" pos="0.45 -0.24  0.165" size="0.015"/>

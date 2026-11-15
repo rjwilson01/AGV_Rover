@@ -1,0 +1,16 @@
+[drawbar]
+controller_class = "FixedDrawbarController"
+mode = "fixed"
+rear_bar_range_m = [0.80, 0.80]
+front_bar_range_m = [0.80, 0.80]
+yaw_angle_range_deg = [-38.0, 38.0]
+telescoping_kp = 15000.0
+telescoping_kv = 800.0
+telescoping_max_force_n = 8000.0
+
+[controller]
+v_center_mps = 1.15
+lookahead_dist_m = 1.65
+max_curvature = 0.42
+yaw_gain = -1.35
+actuator_lead_offset_m = 0.40

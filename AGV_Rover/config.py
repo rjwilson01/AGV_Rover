@@ -3,11 +3,31 @@ from pathlib import Path
 import tomllib
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override dictionary into base dictionary."""
+    merged = dict(base)
+    for key, val in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(val, dict):
+            merged[key] = _deep_merge(merged[key], val)
+        else:
+            merged[key] = val
+    return merged
+
+
 @dataclass(frozen=True)
 class AGVConfig:
+    # Drawbar mode & ranges
+    controller_class: str
+    drawbar_mode: str
+    rear_bar_range_m: tuple[float, float]
+    front_bar_range_m: tuple[float, float]
+    yaw_angle_range_deg: tuple[float, float]
+    telescoping_kp: float
+    telescoping_kv: float
+    telescoping_max_force_n: float
+
     # Geometry
     num_trailers: int
-    half_drawbar_len_m: float
     chassis_half_len_m: float
     chassis_half_width_m: float
     chassis_half_height_m: float
@@ -21,7 +41,6 @@ class AGVConfig:
     cable_anchor_y_m: float
     cable_anchor_z_m: float
     cable_preload_offset_m: float
-    initial_capstan_ctrl_m: float
     ball_joint_limit_deg: float
     ball_joint_damping: float
 
@@ -43,53 +62,66 @@ class AGVConfig:
     capstan_max_pull_n: float
 
     # Controller
+    active_path: str
     v_center_mps: float
     lookahead_dist_m: float
     goal_tol_m: float
     max_curvature: float
     yaw_gain: float
-    joint_yaw_margin_deg: float
     actuator_lead_offset_m: float
     use_ir_camera_feedback: bool
     waypoints: tuple[tuple[float, float], ...]
-    active_name: str
 
     # Simulation & Viewer
-    xml_filename: str
     udp_host: str
     udp_port: int
+    stream_hz: float
     save_csv_log: bool
     post_stop_log_sec: float
     camera_distance_m: float
     camera_azimuth_deg: float
     camera_elevation_deg: float
 
-    # --- Derived Properties ---
     @property
-    def cable_joint_to_plate_x_m(self) -> float:
-        return self.half_drawbar_len_m - self.chassis_half_len_m  # 0.35 m
+    def nominal_rear_bar_m(self) -> float:
+        return self.rear_bar_range_m[0]
+
+    @property
+    def nominal_front_bar_m(self) -> float:
+        return self.front_bar_range_m[0]
 
     @property
     def track_width_m(self) -> float:
-        return 2.0 * self.wheel_y_offset_m  # 0.64 m
-
-    @property
-    def max_joint_yaw_deg(self) -> float:
-        return self.ball_joint_limit_deg - self.joint_yaw_margin_deg  # 38.0 deg
-
-    def joint_delays_m(self) -> list[float]:
-        """Spatial delay from Trailer 1 axle to each ball joint (minus lead compensation)."""
-        return [
-            (2 * i + 1) * self.half_drawbar_len_m - self.actuator_lead_offset_m
-            for i in range(self.num_trailers - 1)
-        ]
+        return 2.0 * self.wheel_y_offset_m
 
 
-def load_config(toml_path: Path | str | None = None) -> AGVConfig:
-    path = Path(toml_path) if toml_path else Path(__file__).resolve().parent / "agv_config.toml"
-    with open(path, "rb") as f:
-        raw = tomllib.load(f)
+def load_config(
+    impl_toml_path: Path | str | None = None,
+    common_toml_path: Path | str | None = None,
+) -> AGVConfig:
+    base_dir = Path(__file__).resolve().parent
 
+    common_path = Path(common_toml_path) if common_toml_path else base_dir / "configs" / "common.toml"
+    if not common_path.is_absolute():
+        common_path = base_dir / common_path
+
+    if impl_toml_path is None:
+        impl_path = base_dir / "configs" / "FixedDrawbarController.toml"
+    else:
+        impl_path = Path(impl_toml_path)
+        if not impl_path.suffix:
+            impl_path = base_dir / "configs" / f"{impl_path.name}.toml"
+        elif not impl_path.is_absolute():
+            impl_path = base_dir / impl_path
+
+    with open(common_path, "rb") as f:
+        common_raw = tomllib.load(f)
+    with open(impl_path, "rb") as f:
+        impl_raw = tomllib.load(f)
+
+    raw = _deep_merge(common_raw, impl_raw)
+
+    d = raw["drawbar"]
     g = raw["geometry"]
     s = raw["tank_slosh"]
     a = raw["actuators"]
@@ -97,15 +129,20 @@ def load_config(toml_path: Path | str | None = None) -> AGVConfig:
     sim = raw["simulation"]
     v = raw["viewer"]
 
-    # Compute local variables BEFORE calling return AGVConfig(...)
     active_name = str(c["active_path"])
     raw_pts = raw["paths"][active_name]
     waypoints = tuple((float(pt[0]), float(pt[1])) for pt in raw_pts)
 
     return AGVConfig(
-        # Geometry
+        controller_class=str(d["controller_class"]),
+        drawbar_mode=str(d["mode"]).lower(),
+        rear_bar_range_m=(float(d["rear_bar_range_m"][0]), float(d["rear_bar_range_m"][1])),
+        front_bar_range_m=(float(d["front_bar_range_m"][0]), float(d["front_bar_range_m"][1])),
+        yaw_angle_range_deg=(float(d["yaw_angle_range_deg"][0]), float(d["yaw_angle_range_deg"][1])),
+        telescoping_kp=float(d["telescoping_kp"]),
+        telescoping_kv=float(d["telescoping_kv"]),
+        telescoping_max_force_n=float(d["telescoping_max_force_n"]),
         num_trailers=int(g["num_trailers"]),
-        half_drawbar_len_m=float(g["half_drawbar_len_m"]),
         chassis_half_len_m=float(g["chassis_half_len_m"]),
         chassis_half_width_m=float(g["chassis_half_width_m"]),
         chassis_half_height_m=float(g["chassis_half_height_m"]),
@@ -119,10 +156,8 @@ def load_config(toml_path: Path | str | None = None) -> AGVConfig:
         cable_anchor_y_m=float(g["cable_anchor_y_m"]),
         cable_anchor_z_m=float(g["cable_anchor_z_m"]),
         cable_preload_offset_m=float(g["cable_preload_offset_m"]),
-        initial_capstan_ctrl_m=float(g["initial_capstan_ctrl_m"]),
         ball_joint_limit_deg=float(g["ball_joint_limit_deg"]),
         ball_joint_damping=float(g["ball_joint_damping"]),
-        # Tank slosh
         water_liters_per_trailer=float(s["water_liters_per_trailer"]),
         slosh_mass_fraction=float(s["slosh_mass_fraction"]),
         slosh_pendulum_len_m=float(s["slosh_pendulum_len_m"]),
@@ -131,27 +166,23 @@ def load_config(toml_path: Path | str | None = None) -> AGVConfig:
         slosh_damping=float(s["slosh_damping"]),
         slosh_roll_limit_deg=float(s["slosh_roll_limit_deg"]),
         slosh_pitch_limit_deg=float(s["slosh_pitch_limit_deg"]),
-        # Actuators
         lead_wheel_kv=float(a["lead_wheel_kv"]),
         trailer_wheel_kv=float(a["trailer_wheel_kv"]),
         capstan_kp=float(a["capstan_kp"]),
         capstan_kv=float(a["capstan_kv"]),
         capstan_max_pull_n=float(a["capstan_max_pull_n"]),
-        # Controller
+        active_path=active_name,
         v_center_mps=float(c["v_center_mps"]),
         lookahead_dist_m=float(c["lookahead_dist_m"]),
         goal_tol_m=float(c["goal_tol_m"]),
         max_curvature=float(c["max_curvature"]),
         yaw_gain=float(c["yaw_gain"]),
-        joint_yaw_margin_deg=float(c["joint_yaw_margin_deg"]),
         actuator_lead_offset_m=float(c["actuator_lead_offset_m"]),
         use_ir_camera_feedback=bool(c["use_ir_camera_feedback"]),
         waypoints=waypoints,
-        active_name=active_name,
-        # Simulation & viewer
-        xml_filename=str(sim["xml_filename"]),
         udp_host=str(sim["udp_host"]),
         udp_port=int(sim["udp_port"]),
+        stream_hz=float(sim["stream_hz"]),
         save_csv_log=bool(sim["save_csv_log"]),
         post_stop_log_sec=float(sim["post_stop_log_sec"]),
         camera_distance_m=float(v["camera_distance_m"]),

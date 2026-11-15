@@ -7,6 +7,9 @@ import numpy as np
 from config import load_config
 from kinematics import SnakePathController, calc_cable_len, quat_to_euler
 from telemetry import TelemetryManager
+from xml_builder import generate_mujoco_xml 
+
+import sys
 
 CORNER_SIGNS = (
     ("tl",  1.0,  1.0),
@@ -80,7 +83,10 @@ def render_path_overlay(viewer, waypoints, lookahead_pt=None):
 
 def main():
     base_dir = Path(__file__).resolve().parent
-    cfg = load_config(base_dir / "agv_config.toml")
+    preset_arg = sys.argv[1] if len(sys.argv) > 1 else None
+    cfg = load_config()
+    controller = SnakePathController(cfg)
+    model = mujoco.MjModel.from_xml_string(generate_mujoco_xml(cfg))
 
     model = mujoco.MjModel.from_xml_path(str(base_dir / cfg.xml_filename))
     data = mujoco.MjData(model)

@@ -1,0 +1,20 @@
+[drawbar]
+controller_class = "VariableDrawbarController"
+mode = "variable"
+rear_bar_range_m = [1.00, 1.50]
+front_bar_range_m = [1.00, 1.50]
+yaw_angle_range_deg = [-40.0, 50.0]
+telescoping_kp = 18000.0
+telescoping_kv = 900.0
+telescoping_max_force_n = 8000.0
+
+[geometry]
+ball_joint_limit_deg = 55.0
+
+[controller]
+active_path = "u_turn_180"
+v_center_mps = 1.05
+lookahead_dist_m = 1.60
+max_curvature = 0.55
+yaw_gain = -1.00
+actuator_lead_offset_m = 0.35

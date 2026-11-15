@@ -1,0 +1,70 @@
+# =====================================================================
+# Shared Vehicle Hardware, Water Tanks, Simulation & Test Courses
+# =====================================================================
+
+[geometry]
+num_trailers = 3
+chassis_half_len_m = 0.45
+chassis_half_width_m = 0.25
+chassis_half_height_m = 0.12
+wheel_y_offset_m = 0.32
+wheel_z_offset_m = -0.14
+wheel_radius_m = 0.18
+wheel_half_width_m = 0.05
+wheel_mass_kg = 8.0
+lead_dry_mass_kg = 110.0
+trailer_dry_mass_kg = 100.0
+cable_anchor_y_m = 0.24
+cable_anchor_z_m = 0.165
+cable_preload_offset_m = 0.002
+ball_joint_limit_deg = 45.0
+ball_joint_damping = 12.0
+
+[tank_slosh]
+water_liters_per_trailer = 120.0
+slosh_mass_fraction = 0.60
+slosh_pendulum_len_m = 0.18
+slosh_roll_stiffness = 65.0
+slosh_pitch_stiffness = 35.0
+slosh_damping = 18.0
+slosh_roll_limit_deg = 35.0
+slosh_pitch_limit_deg = 30.0
+
+[actuators]
+lead_wheel_kv = 45.0
+trailer_wheel_kv = 35.0
+capstan_kp = 20000.0
+capstan_kv = 500.0
+capstan_max_pull_n = 6000.0
+
+[controller]
+active_path = "paddock_turn"
+goal_tol_m = 0.25
+use_ir_camera_feedback = true
+
+[simulation]
+udp_host = "127.0.0.1"
+udp_port = 9870
+stream_hz = 50.0
+save_csv_log = false
+post_stop_log_sec = 2.0
+
+[viewer]
+camera_distance_m = 6.0
+camera_azimuth_deg = 90.0
+camera_elevation_deg = -45.0
+
+[paths]
+paddock_turn = [
+    [0.0, 0.0],
+    [6.0, 0.0],
+    [10.0, 4.0],
+]
+u_turn_180 = [
+    [0.0, 0.0],
+    [5.0, 0.0],
+    [7.5, 1.5],
+    [7.5, 4.5],
+    [5.0, 6.0],
+    [0.0, 6.0],
+]

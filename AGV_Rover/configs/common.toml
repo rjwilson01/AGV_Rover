@@ -41,6 +41,9 @@ capstan_max_pull_n = 6000.0
 active_path = "paddock_turn"
 goal_tol_m = 0.25
 use_ir_camera_feedback = true
+cross_track_gain = 0.55             # Pulls trailing axles onto the path (rad per meter of lateral error)
+joint_angle_kp = 0.35               # IR-camera joint angle P-trim against cable/tire scrub
+
 
 [simulation]
 udp_host = "127.0.0.1"

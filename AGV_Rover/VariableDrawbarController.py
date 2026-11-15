@@ -79,3 +79,10 @@ class VariableDrawbarController(BaseSnakeController):
         self.last_joint_yaws = list(joint_yaws)
         self.last_bar_lengths = list(bar_lengths)
         return wheel_vels, joint_yaws, bar_lengths
+    
+    def get_telemetry(self) -> dict[str, float]:
+        metrics: dict[str, float] = {}
+        for idx, (r_cmd, f_cmd) in enumerate(self.last_bar_lengths, start=1):
+            metrics[f"joint{idx}/rear_bar_cmd_m"] = round(float(r_cmd), 4)
+            metrics[f"joint{idx}/front_bar_cmd_m"] = round(float(f_cmd), 4)
+        return metrics

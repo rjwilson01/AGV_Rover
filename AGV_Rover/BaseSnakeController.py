@@ -142,3 +142,7 @@ def create_controller(cfg: AGVConfig) -> BaseSnakeController:
     module = importlib.import_module(cls_name)
     controller_cls = getattr(module, cls_name)
     return controller_cls(cfg)
+
+    def get_telemetry(self) -> dict[str, float]:
+        """Return controller-specific telemetry channels for PlotJuggler/CSV."""
+        return {}

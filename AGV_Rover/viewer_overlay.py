@@ -2,28 +2,31 @@ import mujoco
 import numpy as np
 
 # Overlay visual constants
-OVERLAY_Z_HEIGHT_M = 0.02
+OVERLAY_Z_HEIGHT_M = 0.04
 WAYPOINT_RADIUS_M = 0.08
-LOOKAHEAD_RADIUS_M = 0.10
-LINE_WIDTH_PX = 4.0
+LOOKAHEAD_RADIUS_M = 0.11
+PATH_CAPSULE_RADIUS_M = 0.015
 
-WAYPOINT_RGBA = np.array([1.0, 0.85, 0.10, 0.85], dtype=np.float32)   # Yellow
-PATH_LINE_RGBA = np.array([0.20, 0.90, 0.40, 0.70], dtype=np.float32)  # Green
-LOOKAHEAD_RGBA = np.array([1.0, 0.25, 0.25, 0.95], dtype=np.float32)  # Red
+WAYPOINT_RGBA = np.array([1.0, 0.85, 0.10, 0.90], dtype=np.float32)   # Yellow
+PATH_LINE_RGBA = np.array([0.10, 0.80, 1.00, 0.70], dtype=np.float32)  # Cyan
+LOOKAHEAD_RGBA = np.array([1.0, 0.20, 0.10, 0.95], dtype=np.float32)  # Red-Orange
 
 
 def render_path_overlay(viewer, waypoints, lookahead_pt=None) -> None:
-    """Draw waypoint spheres, connecting path segments, and the active lookahead target."""
+    """Draw waypoint spheres, connecting path capsules, and the active lookahead target."""
     scn = viewer.user_scn
     scn.ngeom = 0
     pts = np.asarray(waypoints, dtype=float)
     identity_mat = np.eye(3, dtype=np.float64).flatten()
+    zero_size = np.zeros(3, dtype=np.float64)
+    zero_pos = np.zeros(3, dtype=np.float64)
 
     # 1. Waypoint markers & path segments
     for i, pt in enumerate(pts):
-        if scn.ngeom >= scn.maxgeom:
+        if scn.ngeom >= scn.maxgeom - 2:
             break
-        pos = np.array([pt, pt, OVERLAY_Z_HEIGHT_M], dtype=np.float64)
+        x, y = float(pt[0]), float(pt[1])
+        pos = np.array([x, y, OVERLAY_Z_HEIGHT_M + 0.01], dtype=np.float64)
         mujoco.mjv_initGeom(
             scn.geoms[scn.ngeom],
             mujoco.mjtGeom.mjGEOM_SPHERE,
@@ -34,23 +37,30 @@ def render_path_overlay(viewer, waypoints, lookahead_pt=None) -> None:
         )
         scn.ngeom += 1
 
-        if i < len(pts) - 1 and scn.ngeom < scn.maxgeom:
-            nxt = pts[i + 1]
-            p1 = np.array([pt, pt, OVERLAY_Z_HEIGHT_M], dtype=np.float64)
-            p2 = np.array([nxt, nxt, OVERLAY_Z_HEIGHT_M], dtype=np.float64)
-            mujoco.mjv_connector(
-                scn.geoms[scn.ngeom],
+        if i < len(pts) - 1:
+            nx, ny = float(pts[i + 1][0]), float(pts[i + 1][1])
+            g = scn.geoms[scn.ngeom]
+            mujoco.mjv_initGeom(
+                g,
                 mujoco.mjtGeom.mjGEOM_CAPSULE,
-                LINE_WIDTH_PX * 0.004,
-                p1,
-                p2,
+                zero_size,
+                zero_pos,
+                identity_mat,
+                PATH_LINE_RGBA,
             )
-            scn.geoms[scn.ngeom].rgba[:] = PATH_LINE_RGBA
+            mujoco.mjv_connector(
+                g,
+                mujoco.mjtGeom.mjGEOM_CAPSULE,
+                PATH_CAPSULE_RADIUS_M,
+                np.array([x, y, OVERLAY_Z_HEIGHT_M], dtype=np.float64),
+                np.array([nx, ny, OVERLAY_Z_HEIGHT_M], dtype=np.float64),
+            )
             scn.ngeom += 1
 
     # 2. Active Pure Pursuit lookahead target
     if lookahead_pt is not None and scn.ngeom < scn.maxgeom:
-        la_pos = np.array([lookahead_pt, lookahead_pt, OVERLAY_Z_HEIGHT_M + 0.02], dtype=np.float64)
+        lx, ly = float(lookahead_pt[0]), float(lookahead_pt[1])
+        la_pos = np.array([lx, ly, OVERLAY_Z_HEIGHT_M + 0.11], dtype=np.float64)
         mujoco.mjv_initGeom(
             scn.geoms[scn.ngeom],
             mujoco.mjtGeom.mjGEOM_SPHERE,

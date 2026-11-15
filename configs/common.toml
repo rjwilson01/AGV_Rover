@@ -45,6 +45,14 @@ cross_track_gain = 0.55             # Pulls trailing axles onto the path (rad pe
 joint_angle_kp = 0.35               # IR-camera joint angle P-trim against cable/tire scrub
 
 
+[ir_camera]
+# Simulated IR camera: relative roll/pitch/yaw between neighbouring trailers, one reading per joint.
+# All zero = ideal sensor. Order of effects: noise -> quantisation -> latency.
+noise_std_deg = 0.0                 # Gaussian noise per axis (1 sigma)
+latency_s = 0.0                     # Sensor + processing delay in simulated seconds
+quantization_deg = 0.0              # Reading resolution (0 = continuous)
+seed = 0                            # RNG seed so noisy runs are repeatable
+
 [simulation]
 udp_host = "127.0.0.1"
 udp_port = 9870

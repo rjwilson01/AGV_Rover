@@ -5,7 +5,8 @@ from BaseSnakeController import BaseSnakeController, STRAIGHT_LINE_YAW_EPS
 class FixedDrawbarController(BaseSnakeController):
     """Controller for fixed-length drawbars with symmetric or asymmetric yaw limits."""
 
-    def step(self, pos_xy, lead_hdg_rad: float, v_center=None, lookahead_dist=None):
+    def step(self, pos_xy, lead_hdg_rad: float, v_center=None, lookahead_dist=None, ir_readings=None):
+        self._store_ir(ir_readings)
         v_cmd = self.cfg.v_center_mps if v_center is None else v_center
         ld_cmd = self.cfg.lookahead_dist_m if lookahead_dist is None else lookahead_dist
         num_wheels = 2 * self.num_trailers

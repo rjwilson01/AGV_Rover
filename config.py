@@ -82,13 +82,20 @@ class AGVConfig:
     camera_azimuth_deg: float
     camera_elevation_deg: float
 
+    # --- Derived Properties ---
+    @property
+    def num_joints(self) -> int:
+        return self.num_trailers - 1
+
     @property
     def nominal_rear_bar_m(self) -> float:
-        return self.rear_bar_range_m[0]
+        _, r_max = self.rear_bar_range_m
+        return r_max
 
     @property
     def nominal_front_bar_m(self) -> float:
-        return self.front_bar_range_m[0]
+        _, f_max = self.front_bar_range_m
+        return f_max
 
     @property
     def track_width_m(self) -> float:
@@ -129,16 +136,20 @@ def load_config(
     sim = raw["simulation"]
     v = raw["viewer"]
 
+    r_min, r_max = d["rear_bar_range_m"]
+    f_min, f_max = d["front_bar_range_m"]
+    yaw_min, yaw_max = d["yaw_angle_range_deg"]
+
     active_name = str(c["active_path"])
     raw_pts = raw["paths"][active_name]
-    waypoints = tuple((float(pt[0]), float(pt[1])) for pt in raw_pts)
+    waypoints = tuple((float(x), float(y)) for x, y in raw_pts)
 
     return AGVConfig(
         controller_class=str(d["controller_class"]),
         drawbar_mode=str(d["mode"]).lower(),
-        rear_bar_range_m=(float(d["rear_bar_range_m"][0]), float(d["rear_bar_range_m"][1])),
-        front_bar_range_m=(float(d["front_bar_range_m"][0]), float(d["front_bar_range_m"][1])),
-        yaw_angle_range_deg=(float(d["yaw_angle_range_deg"][0]), float(d["yaw_angle_range_deg"][1])),
+        rear_bar_range_m=(float(r_min), float(r_max)),
+        front_bar_range_m=(float(f_min), float(f_max)),
+        yaw_angle_range_deg=(float(yaw_min), float(yaw_max)),
         telescoping_kp=float(d["telescoping_kp"]),
         telescoping_kv=float(d["telescoping_kv"]),
         telescoping_max_force_n=float(d["telescoping_max_force_n"]),

@@ -24,6 +24,9 @@ class TelemetryManager:
         joint_yaws: list[float],
         joint_eulers: list[tuple[float, float, float]],
         forces: dict[str, float],
+        extra_metrics: dict[str, float] | None = None,
+        joint_cables: dict[str, tuple[float, float]] | None = None,
+        trailer_positions: list[tuple[float, float, float]] | None = None,
     ) -> None:
         # Handle simulator Reset (t jumps backward to 0.0) so rate-limiter doesn't stall
         if t < self.last_stream:
@@ -32,7 +35,6 @@ class TelemetryManager:
         if t - self.last_stream < 0.02:
             return
         self.last_stream = t
-
         row = {
             "timestamp": round(float(t), 4),
             "pose/x_m": round(float(pos_xy[0]), 3),
@@ -40,6 +42,8 @@ class TelemetryManager:
             "pose/hdg_deg": round(float(np.rad2deg(lead_hdg)), 3),
             "tension/peak_N": round(float(max(forces.values())) if forces else 0.0, 2),
         }
+        if extra_metrics:
+            row.update(extra_metrics)
 
         # Automatically emits joint1/..., joint2/..., ..., jointN/... for any number of trailers
         for idx, (y_cmd, (yaw_meas, pitch_meas, roll_meas)) in enumerate(
@@ -50,10 +54,31 @@ class TelemetryManager:
             row[f"joint{idx}/pitch_meas_deg"] = round(float(np.rad2deg(pitch_meas)), 3)
             row[f"joint{idx}/roll_meas_deg"] = round(float(np.rad2deg(roll_meas)), 3)
 
+            # 1. Derived axle-to-axle distance
+            if trailer_positions is not None and idx < len(trailer_positions):
+                r_meas = row.get(f"joint{idx}/rear_bar_meas_m")
+                f_meas = row.get(f"joint{idx}/front_bar_meas_m")
+                if r_meas is not None and f_meas is not None:
+                    d_kin = float(np.sqrt(r_meas**2 + f_meas**2 + 2.0 * r_meas * f_meas * np.cos(yaw_meas)))
+                    p_front = np.asarray(trailer_positions[idx - 1])
+                    p_rear = np.asarray(trailer_positions[idx])
+                    d_act = float(np.linalg.norm(p_front - p_rear))
+                    row[f"joint{idx}/axle_dist_kin_m"] = round(d_kin, 4)
+                    row[f"joint{idx}/axle_dist_act_m"] = round(d_act, 4)
+                    row[f"joint{idx}/axle_dist_err_mm"] = round((d_act - d_kin) * 1000.0, 2)
+
+            # 2. Per-joint cables (tl, tr, bl, br) grouped right under joint{idx}/...
+            if joint_cables is not None and idx - 1 < len(joint_cables):
+                for corner, (len_cmd, len_meas, f_val) in joint_cables[idx - 1].items():
+                    row[f"joint{idx}/cable_{corner}_cmd_m"] = round(float(len_cmd), 4)
+                    row[f"joint{idx}/cable_{corner}_meas_m"] = round(float(len_meas), 4)
+                    row[f"joint{idx}/cable_{corner}_err_mm"] = round((float(len_meas) - float(len_cmd)) * 1000.0, 2)
+                    row[f"joint{idx}/tension_{corner}_N"] = round(float(f_val), 2)
+
+
         for t_name, f_val in forces.items():
             row[f"tension/{t_name}_N"] = round(float(f_val), 2)
 
-        self.sock.sendto(json.dumps(row).encode("utf-8"), self.addr)
         self.sock.sendto(json.dumps(row).encode("utf-8"), self.addr)
         if not hasattr(self, "_printed_first_pkt"):
             print(f"[Telemetry] First packet sent ({len(row)} fields)")

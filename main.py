@@ -1,15 +1,14 @@
 from pathlib import Path
+import sys
 import time
 import mujoco
 import mujoco.viewer
-import numpy as np
 
+from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import load_config
-from kinematics import SnakePathController, calc_cable_len, quat_to_euler
 from telemetry import TelemetryManager
-from xml_builder import generate_mujoco_xml 
-
-import sys
+from viewer_overlay import render_path_overlay
+from xml_builder import generate_mujoco_xml
 
 CORNER_SIGNS = (
     ("tl",  1.0,  1.0),
@@ -18,81 +17,22 @@ CORNER_SIGNS = (
     ("br", -1.0, -1.0),
 )
 STOP_WHEEL_VEL_EPS = 1e-6
-WHEEL_NAMES = ["m_t1_l", "m_t1_r", "m_t2_l", "m_t2_r", "m_t3_l", "m_t3_r"]
-SIGNS = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
-
-# Example paddock S-curve waypoints (x, y in meters)
-WAYPOINTS = [
-    [0.0, 0.0], [2.5, 0.0], [5.0, 1.5], [8.0, 1.5],
-    [11.0, -1.5], [14.0, -1.5], [17.0, 0.0], [22.0, 0.0],
-]
-
-def render_path_overlay(viewer, waypoints, lookahead_pt=None):
-    scn = viewer.user_scn
-    scn.ngeom = 0  # Clear previous frame's custom markers
-    identity_mat = np.eye(3).flatten()
-
-    # 1. Draw Waypoint Spheres (Yellow) & Connecting Path Capsules (Cyan)
-    for i, wp in enumerate(waypoints):
-        if scn.ngeom >= scn.maxgeom - 2:
-            break
-        # Waypoint sphere
-        mujoco.mjv_initGeom(
-            scn.geoms[scn.ngeom],
-            type=mujoco.mjtGeom.mjGEOM_SPHERE,
-            size=[0.08, 0, 0],
-            pos=[wp[0], wp[1], 0.05],
-            mat=identity_mat,
-            rgba=[1.0, 0.85, 0.1, 0.9],
-        )
-        scn.ngeom += 1
-
-        # Segment line to next waypoint
-        if i < len(waypoints) - 1:
-            nxt = waypoints[i + 1]
-            g = scn.geoms[scn.ngeom]
-            mujoco.mjv_initGeom(
-                g,
-                type=mujoco.mjtGeom.mjGEOM_CAPSULE,
-                size=[0.015, 0, 0],
-                pos=[0, 0, 0],
-                mat=identity_mat,
-                rgba=[0.1, 0.8, 1.0, 0.7],
-            )
-            mujoco.mjv_connector(
-                g,
-                type=mujoco.mjtGeom.mjGEOM_CAPSULE,
-                width=0.015,
-                from_=[wp[0], wp[1], 0.04],
-                to=[nxt[0], nxt[1], 0.04],
-            )
-            scn.ngeom += 1
-
-    # 2. Draw Active Pure-Pursuit Lookahead Target (Bright Red/Orange Sphere)
-    if lookahead_pt is not None and scn.ngeom < scn.maxgeom:
-        mujoco.mjv_initGeom(
-            scn.geoms[scn.ngeom],
-            type=mujoco.mjtGeom.mjGEOM_SPHERE,
-            size=[0.11, 0, 0],
-            pos=[lookahead_pt[0], lookahead_pt[1], 0.15],
-            mat=identity_mat,
-            rgba=[1.0, 0.2, 0.1, 0.95],
-        )
-        scn.ngeom += 1
 
 
 def main():
     base_dir = Path(__file__).resolve().parent
     preset_arg = sys.argv[1] if len(sys.argv) > 1 else None
-    cfg = load_config()
-    controller = SnakePathController(cfg)
-    model = mujoco.MjModel.from_xml_string(generate_mujoco_xml(cfg))
 
-    model = mujoco.MjModel.from_xml_path(str(base_dir / cfg.xml_filename))
+    cfg = load_config(preset_arg)
+
+    print(f"[Sim] Loaded controller={cfg.controller_class} | mode={cfg.drawbar_mode} | path={cfg.active_path}")
+
+    xml_str = generate_mujoco_xml(cfg)
+    model = mujoco.MjModel.from_xml_string(xml_str)
     data = mujoco.MjData(model)
 
     lead_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trailer_1")
-    controller = SnakePathController(cfg)
+    controller = create_controller(cfg)
     telemetry = TelemetryManager(
         base_dir,
         udp_host=cfg.udp_host,
@@ -100,7 +40,6 @@ def main():
         enable_csv=cfg.save_csv_log,
     )
 
-    # Build actuator & tendon name lists dynamically from num_trailers
     wheel_names = [
         f"m_t{i}_{side}"
         for i in range(1, cfg.num_trailers + 1)
@@ -113,12 +52,15 @@ def main():
         for code, _, _ in CORNER_SIGNS
     ]
     capstan_names = [f"cap_{t_name}" for t_name in tendon_names]
+    actuator_names = {model.actuator(i).name for i in range(model.nu)}
+    joint_names_set = {model.joint(i).name for i in range(model.njnt)}
 
-    def apply_initial_capstan_preload():
+    def apply_neutral_controls():
+        neutral_len = calc_cable_len(0.0, 0.0, 0.0, 1.0, 1.0, cfg) - cfg.cable_preload_offset_m
         for cname in capstan_names:
-            data.actuator(cname).ctrl = cfg.initial_capstan_ctrl_m
+            data.actuator(cname).ctrl = neutral_len
 
-    apply_initial_capstan_preload()
+    apply_neutral_controls()
     prev_sim_time = 0.0
     post_stop_time = 0.0
 
@@ -130,11 +72,10 @@ def main():
         viewer.cam.elevation = cfg.camera_elevation_deg
 
         while viewer.is_running():
-            # Handle MuJoCo viewer Reset button (data.time jumps back to 0)
             if data.time < prev_sim_time:
                 post_stop_time = 0.0
                 controller.reset()
-                apply_initial_capstan_preload()
+                apply_neutral_controls()
             prev_sim_time = data.time
 
             step_start = time.time()
@@ -144,19 +85,34 @@ def main():
             pos_xy = root_qpos[:2]
             lead_hdg, _, _ = quat_to_euler(root_qpos[3:7])
 
-            # Single controller step per physics step
-            wheel_vels, joint_yaws = controller.step(pos_xy, lead_hdg)
+            wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg)
             for w_name, w_vel in zip(wheel_names, wheel_vels):
                 data.actuator(w_name).ctrl = w_vel
 
             joint_eulers = [quat_to_euler(data.joint(j_name).qpos) for j_name in joint_names]
+            _, r_max = cfg.rear_bar_range_m
+            _, f_max = cfg.front_bar_range_m
 
-            for j_idx, (y_cmd, j_euler) in enumerate(zip(joint_yaws, joint_eulers)):
-                p_ctrl, r_ctrl = (j_euler[1], j_euler[2]) if cfg.use_ir_camera_feedback else (0.0, 0.0)
+            for j_idx, (y_cmd, j_euler, (r_cmd, f_cmd)) in enumerate(
+                zip(joint_yaws, joint_eulers, bar_lengths)
+            ):
+                rear_act = f"act_slide_rear_{j_idx + 1}"
+                front_act = f"act_slide_front_{j_idx + 2}"
+                if rear_act in actuator_names:
+                    data.actuator(rear_act).ctrl = r_max - r_cmd
+                if front_act in actuator_names:
+                    data.actuator(front_act).ctrl = f_max - f_cmd
+
+                _, pitch_meas, roll_meas = j_euler
+                p_ctrl, r_ctrl = (pitch_meas, roll_meas) if cfg.use_ir_camera_feedback else (0.0, 0.0)
                 for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
                     c_idx = 4 * j_idx + k
                     data.actuator(capstan_names[c_idx]).ctrl = (
-                        calc_cable_len(-y_cmd, p_ctrl, r_ctrl, ys, zs, cfg) - cfg.cable_preload_offset_m
+                        calc_cable_len(
+                            -y_cmd, p_ctrl, r_ctrl, ys, zs, cfg,
+                            rear_bar_m=r_cmd, front_bar_m=f_cmd,
+                        )
+                        - cfg.cable_preload_offset_m
                     )
 
             mujoco.mj_step(model, data)
@@ -166,7 +122,7 @@ def main():
             viewer.sync()
 
             forces = {
-                t_name: abs(float(data.actuator(c_name).force[0]))
+                t_name: abs(float(data.actuator(c_name).force.item()))
                 for c_name, t_name in zip(capstan_names, tendon_names)
             }
 
@@ -176,13 +132,38 @@ def main():
             else:
                 post_stop_time = 0.0
 
+            extra_metrics = controller.get_telemetry()
+            for j_idx in range(cfg.num_joints):
+                r_jnt = f"slide_rear_{j_idx + 1}"
+                f_jnt = f"slide_front_{j_idx + 2}"
+                extra_metrics[f"joint{j_idx + 1}/rear_bar_meas_m"] = round(
+                    r_max - float(data.joint(r_jnt).qpos.item()) if r_jnt in joint_names_set else r_max, 4
+                )
+                extra_metrics[f"joint{j_idx + 1}/front_bar_meas_m"] = round(
+                    f_max - float(data.joint(f_jnt).qpos.item()) if f_jnt in joint_names_set else f_max, 4
+                )
+            # Put the cables into a per joint list
+            joint_cables = []
+            for j_idx in range(cfg.num_joints):
+                cables_j = {}
+                for k, (code, _, _) in enumerate(CORNER_SIGNS):
+                    c_idx = 4 * j_idx + k
+                    t_name = tendon_names[c_idx]
+                    c_name = capstan_names[c_idx]
+                    cables_j[code] = (
+                        float(data.actuator(c_name).ctrl.item()),
+                        float(data.tendon(t_name).length.item()),
+                        abs(float(data.actuator(c_name).force.item())),
+                    )
+                joint_cables.append(cables_j)
+
+            trailer_positions = [
+                tuple(float(v) for v in data.body(f"trailer_{i}").xpos)
+                for i in range(1, cfg.num_trailers + 1)
+            ]
             if post_stop_time <= cfg.post_stop_log_sec:
-                # Passes joint1 and joint2 telemetry for 3-trailer setup (or first two joints)
-                y1 = joint_yaws[0] if len(joint_yaws) > 0 else 0.0
-                y2 = joint_yaws[1] if len(joint_yaws) > 1 else 0.0
-                j1_euler = joint_eulers[0] if len(joint_eulers) > 0 else (0.0, 0.0, 0.0)
-                j2_euler = joint_eulers[1] if len(joint_eulers) > 1 else (0.0, 0.0, 0.0)
-                telemetry.update(t,pos_xy,lead_hdg,joint_yaws,joint_eulers,forces)
+                telemetry.update(t, pos_xy, lead_hdg, joint_yaws, joint_eulers, forces, extra_metrics, joint_cables,trailer_positions,)
+
 
             elapsed = time.time() - step_start
             if elapsed < model.opt.timestep:

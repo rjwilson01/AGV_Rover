@@ -1,23 +1,20 @@
-import time
 from pathlib import Path
+import time
 import mujoco
 import mujoco.viewer
 import numpy as np
 
+from config import load_config
 from kinematics import SnakePathController, calc_cable_len, quat_to_euler
 from telemetry import TelemetryManager
 
-USE_IR_CAMERA_FEEDBACK = True
-SAVE_CSV_LOG = False  # Toggle CSV logging on/off here
-
-CAPSTAN_NAMES = [
-    "cap_t1_t2_tl", "cap_t1_t2_tr", "cap_t1_t2_bl", "cap_t1_t2_br",
-    "cap_t2_t3_tl", "cap_t2_t3_tr", "cap_t2_t3_bl", "cap_t2_t3_br",
-]
-TENDON_NAMES = [
-    "t1_t2_tl", "t1_t2_tr", "t1_t2_bl", "t1_t2_br",
-    "t2_t3_tl", "t2_t3_tr", "t2_t3_bl", "t2_t3_br",
-]
+CORNER_SIGNS = (
+    ("tl",  1.0,  1.0),
+    ("tr", -1.0,  1.0),
+    ("bl",  1.0, -1.0),
+    ("br", -1.0, -1.0),
+)
+STOP_WHEEL_VEL_EPS = 1e-6
 WHEEL_NAMES = ["m_t1_l", "m_t1_r", "m_t2_l", "m_t2_r", "m_t3_l", "m_t3_r"]
 SIGNS = [(1, 1), (-1, 1), (1, -1), (-1, -1)]
 
@@ -83,48 +80,103 @@ def render_path_overlay(viewer, waypoints, lookahead_pt=None):
 
 def main():
     base_dir = Path(__file__).resolve().parent
-    model = mujoco.MjModel.from_xml_path(str(base_dir / "snake_agv_sim.xml"))
+    cfg = load_config(base_dir / "agv_config.toml")
+
+    model = mujoco.MjModel.from_xml_path(str(base_dir / cfg.xml_filename))
     data = mujoco.MjData(model)
 
-    controller = SnakePathController(WAYPOINTS)
-    telemetry = TelemetryManager(base_dir, udp_host="127.0.0.1", udp_port=9870, enable_csv=SAVE_CSV_LOG)
+    lead_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trailer_1")
+    controller = SnakePathController(cfg)
+    telemetry = TelemetryManager(
+        base_dir,
+        udp_host=cfg.udp_host,
+        udp_port=cfg.udp_port,
+        enable_csv=cfg.save_csv_log,
+    )
 
-    for cname in CAPSTAN_NAMES:
-        data.actuator(cname).ctrl = 0.698
+    # Build actuator & tendon name lists dynamically from num_trailers
+    wheel_names = [
+        f"m_t{i}_{side}"
+        for i in range(1, cfg.num_trailers + 1)
+        for side in ("l", "r")
+    ]
+    joint_names = [f"ball_joint_{j}" for j in range(1, cfg.num_trailers)]
+    tendon_names = [
+        f"t{j}_t{j + 1}_{code}"
+        for j in range(1, cfg.num_trailers)
+        for code, _, _ in CORNER_SIGNS
+    ]
+    capstan_names = [f"cap_{t_name}" for t_name in tendon_names]
+
+    def apply_initial_capstan_preload():
+        for cname in capstan_names:
+            data.actuator(cname).ctrl = cfg.initial_capstan_ctrl_m
+
+    apply_initial_capstan_preload()
+    prev_sim_time = 0.0
+    post_stop_time = 0.0
 
     with mujoco.viewer.launch_passive(model, data) as viewer:
+        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+        viewer.cam.trackbodyid = lead_body_id
+        viewer.cam.distance = cfg.camera_distance_m
+        viewer.cam.azimuth = cfg.camera_azimuth_deg
+        viewer.cam.elevation = cfg.camera_elevation_deg
+
         while viewer.is_running():
+            # Handle MuJoCo viewer Reset button (data.time jumps back to 0)
+            if data.time < prev_sim_time:
+                post_stop_time = 0.0
+                controller.reset()
+                apply_initial_capstan_preload()
+            prev_sim_time = data.time
+
             step_start = time.time()
             t = float(data.time)
 
             root_qpos = data.joint("root_jnt").qpos
             pos_xy = root_qpos[:2]
-            lead_hdg, _, _ = quat_to_euler(root_qpos[3:7])  # Index 0 is YAW!
+            lead_hdg, _, _ = quat_to_euler(root_qpos[3:7])
 
-            wheel_vels, y1, y2 = controller.step(pos_xy, lead_hdg, v_center=1.15)
-            for w_name, w_vel in zip(WHEEL_NAMES, wheel_vels):
+            # Single controller step per physics step
+            wheel_vels, joint_yaws = controller.step(pos_xy, lead_hdg)
+            for w_name, w_vel in zip(wheel_names, wheel_vels):
                 data.actuator(w_name).ctrl = w_vel
 
-            j1_euler = quat_to_euler(data.joint("ball_joint_1").qpos)
-            j2_euler = quat_to_euler(data.joint("ball_joint_2").qpos)
-            p1_ctrl, r1_ctrl = (j1_euler[1], j1_euler[2]) if USE_IR_CAMERA_FEEDBACK else (0.0, 0.0)
-            p2_ctrl, r2_ctrl = (j2_euler[1], j2_euler[2]) if USE_IR_CAMERA_FEEDBACK else (0.0, 0.0)
+            joint_eulers = [quat_to_euler(data.joint(j_name).qpos) for j_name in joint_names]
 
-            for k, (ys, zs) in enumerate(SIGNS):
-                data.actuator(CAPSTAN_NAMES[k]).ctrl = calc_cable_len(-y1, p1_ctrl, r1_ctrl, ys, zs) - 0.002
-                data.actuator(CAPSTAN_NAMES[4 + k]).ctrl = calc_cable_len(-y2, p2_ctrl, r2_ctrl, ys, zs) - 0.002
+            for j_idx, (y_cmd, j_euler) in enumerate(zip(joint_yaws, joint_eulers)):
+                p_ctrl, r_ctrl = (j_euler[1], j_euler[2]) if cfg.use_ir_camera_feedback else (0.0, 0.0)
+                for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
+                    c_idx = 4 * j_idx + k
+                    data.actuator(capstan_names[c_idx]).ctrl = (
+                        calc_cable_len(-y_cmd, p_ctrl, r_ctrl, ys, zs, cfg) - cfg.cable_preload_offset_m
+                    )
 
             mujoco.mj_step(model, data)
 
             with viewer.lock():
-                render_path_overlay(viewer, WAYPOINTS, controller.last_lookahead)
+                render_path_overlay(viewer, cfg.waypoints, controller.last_lookahead)
             viewer.sync()
 
             forces = {
                 t_name: abs(float(data.actuator(c_name).force[0]))
-                for c_name, t_name in zip(CAPSTAN_NAMES, TENDON_NAMES)
+                for c_name, t_name in zip(capstan_names, tendon_names)
             }
-            telemetry.update(t, pos_xy, np.rad2deg(lead_hdg), y1, y2, j1_euler, j2_euler, forces)
+
+            is_stopped = all(abs(v) < STOP_WHEEL_VEL_EPS for v in wheel_vels)
+            if is_stopped:
+                post_stop_time += model.opt.timestep
+            else:
+                post_stop_time = 0.0
+
+            if post_stop_time <= cfg.post_stop_log_sec:
+                # Passes joint1 and joint2 telemetry for 3-trailer setup (or first two joints)
+                y1 = joint_yaws[0] if len(joint_yaws) > 0 else 0.0
+                y2 = joint_yaws[1] if len(joint_yaws) > 1 else 0.0
+                j1_euler = joint_eulers[0] if len(joint_eulers) > 0 else (0.0, 0.0, 0.0)
+                j2_euler = joint_eulers[1] if len(joint_eulers) > 1 else (0.0, 0.0, 0.0)
+                telemetry.update(t,pos_xy,lead_hdg,joint_yaws,joint_eulers,forces)
 
             elapsed = time.time() - step_start
             if elapsed < model.opt.timestep:

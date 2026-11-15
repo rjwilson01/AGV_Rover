@@ -1,0 +1,91 @@
+# =====================================================================
+# AGV Multi-Trailer Snake Rover Configuration
+# =====================================================================
+
+[geometry]
+num_trailers = 3
+half_drawbar_len_m = 0.80        # Axle center (0.0) to ball joint (±0.80)
+chassis_half_len_m = 0.45        # Box x half-size
+chassis_half_width_m = 0.25      # Box y half-size
+chassis_half_height_m = 0.12     # Box z half-size
+wheel_y_offset_m = 0.32          # Track half-width (±0.32 -> 0.64 m track)
+wheel_z_offset_m = -0.14         # Wheel vertical offset from chassis center
+wheel_radius_m = 0.18            # Drive tire radius
+wheel_half_width_m = 0.05        # Tire cylinder half-width
+wheel_mass_kg = 8.0
+
+lead_dry_mass_kg = 110.0
+trailer_dry_mass_kg = 100.0
+
+# Cable anchor plate offsets relative to chassis center
+cable_anchor_y_m = 0.24
+cable_anchor_z_m = 0.165
+cable_preload_offset_m = 0.002   # Slight cable tension offset subtracted from target length
+initial_capstan_ctrl_m = 0.698   # Initial neutral cable length (2 * 0.35 m)
+
+ball_joint_limit_deg = 45.0
+ball_joint_damping = 12.0
+
+[tank_slosh]
+water_liters_per_trailer = 120.0 # Set to 0.0 to disable sloshing water mass
+slosh_mass_fraction = 0.60       # 60% dynamic pendulum mass, 40% rigid mass
+slosh_pendulum_len_m = 0.18
+slosh_roll_stiffness = 65.0
+slosh_pitch_stiffness = 35.0
+slosh_damping = 18.0
+slosh_roll_limit_deg = 35.0
+slosh_pitch_limit_deg = 30.0
+
+[actuators]
+lead_wheel_kv = 45.0
+trailer_wheel_kv = 35.0
+capstan_kp = 20000.0
+capstan_kv = 500.0
+capstan_max_pull_n = 6000.0
+
+[controller]
+v_center_mps = 1.15
+lookahead_dist_m = 2.20          # Increased from 1.40 m to damp snake oscillation
+goal_tol_m = 0.25
+max_curvature = 0.42
+yaw_gain = -1.10                 # Softened from -1.60 to prevent ±38 deg saturation
+joint_yaw_margin_deg = 7.0       # Safety buffer inside 45 deg ball-joint limit
+actuator_lead_offset_m = 0.40    # Lead compensation for cable/actuator lag
+use_ir_camera_feedback = true
+active_path = "u_bend"
+
+[paths]
+straight_ruts = [
+    [0.0, 0.0],
+    [8.0, 0.0],
+]
+paddock_turn = [
+    [0.0, 0.0],
+    [6.0, 0.0],
+    [10.0, 4.0],
+]
+s_bend = [
+    [0.0, 0.0],
+    [4.0, 0.0],
+    [8.0, 3.0],
+    [12.0, 3.0],
+    [16.0, 0.0],
+]
+u_bend = [
+    [0.0, 0.0],
+    [10.0, 0.0],
+    [10.0, 4.0],
+    [0.0, 4.0],
+]
+
+[simulation]
+xml_filename = "snake_agv_sim.xml"
+udp_host = "127.0.0.1"
+udp_port = 9870
+save_csv_log = false
+post_stop_log_sec = 2.0
+
+[viewer]
+camera_distance_m = 6.0
+camera_azimuth_deg = 90.0
+camera_elevation_deg = -45.0

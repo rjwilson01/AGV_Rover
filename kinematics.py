@@ -1,39 +1,69 @@
-import numpy as np
 from collections import deque
+import numpy as np
+from config import AGVConfig
 
-def calc_cable_len(yaw, pitch, roll, y_sign, z_sign, L_bar=0.35, W_y=0.24, H_z=0.165):
+# Numerical & algorithm constants
+PATH_HISTORY_MAX_SAMPLES = 4000
+MIN_LOOKAHEAD_SQ_M2 = 0.10
+STRAIGHT_LINE_YAW_EPS = 1e-4
+NUMERIC_EPS = 1e-9
+
+
+def calc_cable_len(
+    yaw: float,
+    pitch: float,
+    roll: float,
+    y_sign: float,
+    z_sign: float,
+    cfg: AGVConfig,
+) -> float:
+    """Compute tendon length between adjacent trailer anchor plates for a given joint orientation."""
+    L_bar = cfg.cable_joint_to_plate_x_m
+    W_y = cfg.cable_anchor_y_m
+    H_z = cfg.cable_anchor_z_m
+
     cy, sy = np.cos(yaw), np.sin(yaw)
     cp, sp = np.cos(pitch), np.sin(pitch)
     cr, sr = np.cos(roll), np.sin(roll)
+
     bx, by, bz = L_bar, y_sign * W_y, z_sign * H_z
     wx = (cy * cp) * bx + (cy * sp * sr - sy * cr) * by + (cy * sp * cr + sy * sr) * bz
     wy = (sy * cp) * bx + (sy * sp * sr + cy * cr) * by + (sy * sp * cr - cy * sr) * bz
     wz = (-sp) * bx + (cp * sr) * by + (cp * cr) * bz
+
     return float(np.linalg.norm([wx + L_bar, wy - by, wz - bz]))
 
-def quat_to_euler(q):
+
+def quat_to_euler(q) -> tuple[float, float, float]:
+    """Convert [w, x, y, z] quaternion to (yaw, pitch, roll) in radians."""
     w, x, y, z = q
-    roll = np.arctan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
-    pitch = np.arcsin(np.clip(2 * (w * y - z * x), -1.0, 1.0))
-    yaw = np.arctan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    roll = np.arctan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y))
+    pitch = np.arcsin(np.clip(2.0 * (w * y - z * x), -1.0, 1.0))
+    yaw = np.arctan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
     return float(yaw), float(pitch), float(roll)
 
 
 class SnakePathController:
-    def __init__(self, waypoints, l_seg=0.80, track_w=0.64, wheel_r=0.18):
-        self.waypoints = np.asarray(waypoints, dtype=float)
-        self.L_SEG = l_seg
-        self.TRACK_W = track_w
-        self.WHEEL_R = wheel_r
+    def __init__(self, cfg: AGVConfig):
+        self.cfg = cfg
+        self.waypoints = np.asarray(cfg.waypoints, dtype=float)
+        self.num_trailers = cfg.num_trailers
+        self.num_joints = cfg.num_trailers - 1
+        self.joint_delays_m = cfg.joint_delays_m()
+        self.max_joint_yaw_rad = np.deg2rad(cfg.max_joint_yaw_deg)
+
+        self.path_history: deque[tuple[float, float]] = deque(maxlen=PATH_HISTORY_MAX_SAMPLES)
+        self.reset()
+
+    def reset(self) -> None:
+        """Reset all runtime path-tracking state (call on simulator reset)."""
         self.dist_traveled = 0.0
         self.prev_pos = None
-        self.path_history = deque(maxlen=4000)
+        self.path_history.clear()
         self.last_lookahead = None
+        self.last_joint_yaws = [0.0] * self.num_joints
 
-
-
-    def _get_lookahead_point(self, pos_xy, lookahead_dist):
-        # 1. Find closest point on any waypoint segment
+    def _get_lookahead_point(self, pos_xy, lookahead_dist: float):
         best_dist = float("inf")
         best_seg_idx = 0
         best_proj = self.waypoints[0]
@@ -43,7 +73,7 @@ class SnakePathController:
             b = self.waypoints[i + 1]
             ab = b - a
             ab_len_sq = float(np.dot(ab, ab))
-            t = np.clip(np.dot(pos_xy - a, ab) / (ab_len_sq + 1e-9), 0.0, 1.0)
+            t = np.clip(np.dot(pos_xy - a, ab) / (ab_len_sq + NUMERIC_EPS), 0.0, 1.0)
             proj = a + t * ab
             d = float(np.linalg.norm(pos_xy - proj))
             if d < best_dist:
@@ -51,38 +81,54 @@ class SnakePathController:
                 best_seg_idx = i
                 best_proj = proj
 
-        # 2. Walk forward along the path from best_proj by lookahead_dist
         rem = lookahead_dist
         curr_pt = best_proj
         idx = best_seg_idx
+
         while idx < len(self.waypoints) - 1:
             seg_end = self.waypoints[idx + 1]
             seg_vec = seg_end - curr_pt
             seg_len = float(np.linalg.norm(seg_vec))
             if seg_len >= rem:
-                return curr_pt + (seg_vec / (seg_len + 1e-9)) * rem, False
+                return curr_pt + (seg_vec / (seg_len + NUMERIC_EPS)) * rem, False
             rem -= seg_len
             curr_pt = seg_end
             idx += 1
 
         return self.waypoints[-1].copy(), True
 
-    def _lookup_yaw(self, delay_m):
+    def _lookup_yaw(self, delay_m: float) -> float:
         target_d = self.dist_traveled - delay_m
         for d, y in reversed(self.path_history):
             if d <= target_d:
                 return y
         return 0.0
 
-    def step(self, pos_xy, lead_hdg_rad, v_center=1.15, lookahead_dist=1.4):
+    def step(
+        self,
+        pos_xy,
+        lead_hdg_rad: float,
+        v_center: float | None = None,
+        lookahead_dist: float | None = None,
+    ) -> tuple[list[float], list[float]]:
+        """
+        Compute wheel angular velocities (2 per trailer) and target joint yaws (N-1 joints).
+        Returns (wheel_vels, joint_yaws).
+        """
+        v_cmd = self.cfg.v_center_mps if v_center is None else v_center
+        ld_cmd = self.cfg.lookahead_dist_m if lookahead_dist is None else lookahead_dist
+        num_wheels = 2 * self.num_trailers
+
         if self.prev_pos is not None:
             self.dist_traveled += float(np.linalg.norm(pos_xy - self.prev_pos))
         self.prev_pos = pos_xy.copy()
 
-        target_pt, at_goal = self._get_lookahead_point(pos_xy, lookahead_dist)
+        target_pt, at_goal = self._get_lookahead_point(pos_xy, ld_cmd)
         self.last_lookahead = target_pt.copy()
-        if at_goal and np.linalg.norm(target_pt - pos_xy) < 0.25:
-            return [0.0] * 6, 0.0, 0.0
+
+        # Hold final joint angles at goal so locked wheels don't fight straightening cables
+        if at_goal and np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m:
+            return [0.0] * num_wheels, list(self.last_joint_yaws)
 
         # Transform target into lead AGV local coordinates
         dx, dy = target_pt - pos_xy
@@ -90,29 +136,38 @@ class SnakePathController:
         x_loc = c * dx - s * dy
         y_loc = s * dx + c * dy
 
-        # Pure pursuit curvature: y_loc > 0 means target is to the LEFT (+Y).
-        # Because trailers trail behind (-X), turning LEFT requires negative joint yaw (y1 < 0)
-        # and slower left wheels (wl < wr).
-        # y_loc > 0 (target to the LEFT) -> kappa > 0 -> y1 > 0 -> wr > wl (turns LEFT!)
-        # y_loc > 0 means target is to the LEFT (+Y).
-        # In our capstan geometry, y1 < 0 pulls LEFT cables (turns LEFT / +Y).
-        Ld_sq = max(x_loc**2 + y_loc**2, 0.1)
-        kappa = float(np.clip((2.0 * y_loc) / Ld_sq, -0.42, 0.42))
-        target_yaw = float(np.clip(-1.60 * kappa, -np.deg2rad(38.0), np.deg2rad(38.0)))
-
+        # Pure Pursuit curvature -> capstan joint yaw
+        ld_sq = max(x_loc**2 + y_loc**2, MIN_LOOKAHEAD_SQ_M2)
+        kappa = float(np.clip((2.0 * y_loc) / ld_sq, -self.cfg.max_curvature, self.cfg.max_curvature))
+        target_yaw = float(
+            np.clip(self.cfg.yaw_gain * kappa, -self.max_joint_yaw_rad, self.max_joint_yaw_rad)
+        )
         self.path_history.append((self.dist_traveled, target_yaw))
-        y1 = self._lookup_yaw(0.40)
-        y2 = self._lookup_yaw(2.00)
 
-        # Differential wheel speeds matching capstan turn direction:
-        # When psi < 0 (turning LEFT / +Y), R < 0 -> wl < wr (left wheel slower, right wheel faster!)
-        wheel_vels = []
-        for psi in (y1, 0.5 * (y1 + y2), y2):
-            if abs(psi) < 1e-4:
-                wl = wr = v_center / self.WHEEL_R
+        joint_yaws = [self._lookup_yaw(delay) for delay in self.joint_delays_m]
+
+        # Effective steering angle at each axle:
+        # Axle 0 (lead): joint_yaws[0]
+        # Middle axles i: average of front and rear joints 0.5 * (joint_yaws[i-1] + joint_yaws[i])
+        # Last axle (N-1): joint_yaws[-1]
+        axle_yaws = []
+        for i in range(self.num_trailers):
+            if i == 0:
+                axle_yaws.append(joint_yaws[0])
+            elif i == self.num_trailers - 1:
+                axle_yaws.append(joint_yaws[-1])
             else:
-                R = self.L_SEG / np.tan(psi / 2.0)
-                wl = (v_center * (1.0 + self.TRACK_W / (2.0 * R))) / self.WHEEL_R
-                wr = (v_center * (1.0 - self.TRACK_W / (2.0 * R))) / self.WHEEL_R
+                axle_yaws.append(0.5 * (joint_yaws[i - 1] + joint_yaws[i]))
+
+        wheel_vels = []
+        for psi in axle_yaws:
+            if abs(psi) < STRAIGHT_LINE_YAW_EPS:
+                wl = wr = v_cmd / self.cfg.wheel_radius_m
+            else:
+                turn_radius = self.cfg.half_drawbar_len_m / np.tan(psi / 2.0)
+                wl = (v_cmd * (1.0 + self.cfg.track_width_m / (2.0 * turn_radius))) / self.cfg.wheel_radius_m
+                wr = (v_cmd * (1.0 - self.cfg.track_width_m / (2.0 * turn_radius))) / self.cfg.wheel_radius_m
             wheel_vels.extend([wl, wr])
-        return wheel_vels, y1, y2
+
+        self.last_joint_yaws = list(joint_yaws)
+        return wheel_vels, joint_yaws

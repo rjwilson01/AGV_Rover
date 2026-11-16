@@ -1,8 +1,8 @@
 """Geometry of the yaw-controlled drawbars (Variable build with cfg.bar_yaw_control = true).
 
 Each trailer end has a tube that pivots (yaw hinge, axis +Z) near the chassis edge. The drawbar
-slides inside the tube and ends in the passive ball joint. Two horizontal cables (pull/pull) run
-from the chassis to the tube and set the tube's yaw. Per hitch, between trailer j (ahead) and
+slides inside the tube and ends in the passive ball joint. In the real build two horizontal cables
+(pull/pull) set the tube's yaw; the simulation commands the hinge angle directly. Per hitch, between trailer j (ahead) and
 trailer j+1 (behind), the kinematic chain is
 
     X = Tr(-p) Rz(psi_r) Tr(-s_r) Rb Tr(-s_f) Rz(psi_f) Tr(-p)
@@ -18,15 +18,12 @@ With Rb = I the two bars form one straight line and the trailer-to-trailer yaw i
 Bar lengths r, f follow the existing meaning: distance from the trailer centre to the ball when
 the bar is straight (psi = 0).
 
-All angles in radians. Left = +Y, right = -Y in the trailer (or tube) frame.
+All angles in radians.
 """
 
 import numpy as np
 
 from config import AGVConfig
-
-SIDES = (("l", 1.0), ("r", -1.0))
-
 
 def rot_z(a: float) -> np.ndarray:
     c, s = np.cos(a), np.sin(a)
@@ -64,37 +61,13 @@ def pivot_x_m(cfg: AGVConfig) -> float:
 def validate_bar_config(cfg: AGVConfig) -> None:
     """Raise ValueError if the bar/tube dimensions cannot be built."""
     p = pivot_x_m(cfg)
-    a = cfg.bar_cable_arm_m
     if p <= 0.0:
         raise ValueError(f"bar_pivot_inset_m={cfg.bar_pivot_inset_m} puts the pivot at or past the trailer centre")
     for name, (b_min, _) in (("rear", cfg.rear_bar_range_m), ("front", cfg.front_bar_range_m)):
-        if b_min - p <= a:
+        if b_min - p <= 0.05:
             raise ValueError(
-                f"{name}_bar_range_m minimum {b_min} leaves only {b_min - p:.3f} m of bar beyond the pivot; "
-                f"it must exceed bar_cable_arm_m={a} so the cable attachment stays on the tube"
+                f"{name}_bar_range_m minimum {b_min} leaves only {b_min - p:.3f} m of bar beyond the pivot at {p:.3f} m"
             )
-    if cfg.bar_cable_tube_half_width_m <= 0.0:
-        raise ValueError("bar_cable_tube_half_width_m must be positive")
-
-
-def rear_bar_cable_len(psi_r: float, side: float, cfg: AGVConfig) -> float:
-    """Length of the horizontal cable (side=+1 left, -1 right) from trailer j's chassis to its rear tube."""
-    p, a, w = pivot_x_m(cfg), cfg.bar_cable_arm_m, cfg.bar_cable_tube_half_width_m
-    anchor = np.array([-cfg.chassis_half_len_m, side * cfg.cable_anchor_y_m])
-    tube_pt = np.array([-p, 0.0]) + rot_z(psi_r)[:2, :2] @ np.array([-a, side * w])
-    return float(np.linalg.norm(anchor - tube_pt))
-
-
-def front_bar_cable_len(psi_f: float, side: float, cfg: AGVConfig) -> float:
-    """Length of the horizontal cable from trailer j+1's chassis to its front tube.
-
-    The trailer rotates by psi_f about the pivot relative to the tube, so work in the tube frame.
-    """
-    p, a, w = pivot_x_m(cfg), cfg.bar_cable_arm_m, cfg.bar_cable_tube_half_width_m
-    anchor_trailer = np.array([cfg.chassis_half_len_m, side * cfg.cable_anchor_y_m])
-    anchor_tube = rot_z(psi_f)[:2, :2] @ (anchor_trailer - np.array([p, 0.0]))
-    tube_pt = np.array([a, side * w])
-    return float(np.linalg.norm(anchor_tube - tube_pt))
 
 
 def hitch_transform(

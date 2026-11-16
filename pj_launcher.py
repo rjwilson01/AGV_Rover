@@ -123,7 +123,7 @@ def build_plotjuggler_layout(layout_path: Path, udp_port: int = 9870, num_joints
                 (f"joint{j}/yaw_cmd_deg", "#1f77b4"),
                 (f"joint{j}/yaw_meas_deg", "#ff7f0e"),
             ]),
-            # Yaw-tube builds only: commanded vs measured yaw of each drawbar tube, and the tube cables
+            # Yaw-tube builds only: commanded vs measured yaw of each drawbar tube, and the torque it takes
             *([
                 ("Bar Yaw (deg)", [
                     (f"joint{j}/rear_yaw_cmd_deg", "#1f77b4"),
@@ -132,11 +132,9 @@ def build_plotjuggler_layout(layout_path: Path, udp_port: int = 9870, num_joints
                     (f"joint{j}/front_yaw_meas_deg", "#ff7f0e"),
                     (f"joint{j}/ball_yaw_meas_deg", "#7f7f7f"),
                 ]),
-                ("Bar Cable Tensions (N)", [
-                    (f"joint{j}/tension_rear_l_N", "#1f77b4"),
-                    (f"joint{j}/tension_rear_r_N", "#17becf"),
-                    (f"joint{j}/tension_front_l_N", "#d62728"),
-                    (f"joint{j}/tension_front_r_N", "#ff7f0e"),
+                ("Bar Yaw Torque (Nm)", [
+                    (f"joint{j}/rear_yaw_torque_Nm", "#1f77b4"),
+                    (f"joint{j}/front_yaw_torque_Nm", "#d62728"),
                 ]),
             ] if bar_yaw else []),
             ("Pitch & Roll (deg)", [

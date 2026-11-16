@@ -22,15 +22,17 @@ yaw_gain = -1.00
 actuator_lead_offset_m = 0.35
 
 [bars]
-# Each drawbar sits in a tube that pivots (yaw) near the trailer edge. Two horizontal cables
-# (pull/pull) set the tube yaw. The ball joint between the two bar tips is passive.
-# Geometry values below are PLACEHOLDERS - replace with the real build.
+# Each drawbar sits in a tube that pivots (yaw) near the trailer edge. The simulation commands the tube
+# yaw angle directly (the real build drives it with pull/pull cables); the bar length is the separate
+# slider actuator. The ball joint between the two bar tips is passive, and the 4 trailer-to-trailer
+# cables are kept as on the Fixed build. Values below are PLACEHOLDERS - replace with the real build.
 yaw_control = true
-keep_trailer_cables = true            # also keep the 4 trailer-to-trailer cables (pitch/roll hold). false = tube cables only
 rear_yaw_range_deg = [-25.0, 25.0]    # commanded yaw range of each rear tube (rear bar of trailer n)
 front_yaw_range_deg = [-25.0, 25.0]   # commanded yaw range of each front tube (front bar of trailer n+1)
 pivot_inset_m = 0.05                  # tube pivot sits this far inside the chassis end
-cable_arm_m = 0.20                    # cable attachment point distance along the tube from the pivot
-cable_tube_half_width_m = 0.04        # lateral offset of each cable attachment on the tube
-yaw_damping = 8.0
+yaw_kp = 400.0                        # tube yaw position actuator gain (N*m per rad)
+yaw_kv = 20.0                         # tube yaw actuator damping (N*m per rad/s)
+yaw_max_torque_nm = 200.0
+yaw_damping = 2.0                     # passive hinge damping
 yaw_hinge_margin_deg = 5.0            # hinge stop sits this far beyond the commanded range
+

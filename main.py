@@ -5,14 +5,7 @@ import numpy as np
 import mujoco
 import mujoco.viewer
 
-from bar_geometry import (
-    SIDES,
-    axle_distance,
-    ball_ypr_from_trailer_relative,
-    front_bar_cable_len,
-    rear_bar_cable_len,
-    trailer_cable_len,
-)
+from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import load_config
 from ir_camera import IRCameraModel, relative_euler
@@ -59,22 +52,12 @@ def main():
     ]
     joint_names = [f"ball_joint_{j}" for j in range(1, cfg.num_trailers)]
     bars = cfg.bar_yaw_control
-    trailer_cables = (not bars) or cfg.keep_trailer_cables
     tendon_names = [
         f"t{j}_t{j + 1}_{code}"
         for j in range(1, cfg.num_trailers)
         for code, _, _ in CORNER_SIGNS
-    ] if trailer_cables else []
+    ]
     capstan_names = [f"cap_{t_name}" for t_name in tendon_names]
-    # Yaw-tube cables, grouped per hitch: (key, tendon name, kind, side sign)
-    bar_cables_by_joint: list[list[tuple[str, str, str, float]]] = [[] for _ in range(cfg.num_joints)]
-    if bars:
-        for j in range(1, cfg.num_trailers):
-            for kind, owner in (("rear", j), ("front", j + 1)):
-                for side_name, side in SIDES:
-                    bar_cables_by_joint[j - 1].append(
-                        (f"{kind}_{side_name}", f"bar_t{owner}_{kind}_{side_name}", kind, side)
-                    )
     actuator_names = {model.actuator(i).name for i in range(model.nu)}
     joint_names_set = {model.joint(i).name for i in range(model.njnt)}
 
@@ -82,10 +65,10 @@ def main():
         neutral_len = calc_cable_len(0.0, 0.0, 0.0, 1.0, 1.0, cfg) - cfg.cable_preload_offset_m
         for cname in capstan_names:
             data.actuator(cname).ctrl = neutral_len
-        for cables in bar_cables_by_joint:
-            for _, t_name, kind, side in cables:
-                fn = rear_bar_cable_len if kind == "rear" else front_bar_cable_len
-                data.actuator(f"cap_{t_name}").ctrl = fn(0.0, side, cfg) - cfg.cable_preload_offset_m
+        if bars:
+            for j in range(1, cfg.num_trailers):
+                data.actuator(f"act_yaw_rear_{j}").ctrl = 0.0
+                data.actuator(f"act_yaw_front_{j + 1}").ctrl = 0.0
 
     apply_neutral_controls()
     prev_sim_time = 0.0
@@ -154,15 +137,13 @@ def main():
                         )
                     else:
                         p_ball = r_ball = 0.0
-                    for key, t_name, kind, side in bar_cables_by_joint[j_idx]:
-                        fn, psi = (rear_bar_cable_len, psi_r) if kind == "rear" else (front_bar_cable_len, psi_f)
-                        data.actuator(f"cap_{t_name}").ctrl = fn(psi, side, cfg) - cfg.cable_preload_offset_m
-                    if trailer_cables:
-                        for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
-                            data.actuator(capstan_names[4 * j_idx + k]).ctrl = (
-                                trailer_cable_len(psi_r, psi_f, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cmd, f_cmd)
-                                - cfg.cable_preload_offset_m
-                            )
+                    data.actuator(f"act_yaw_rear_{j_idx + 1}").ctrl = psi_r
+                    data.actuator(f"act_yaw_front_{j_idx + 2}").ctrl = psi_f
+                    for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
+                        data.actuator(capstan_names[4 * j_idx + k]).ctrl = (
+                            trailer_cable_len(psi_r, psi_f, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cmd, f_cmd)
+                            - cfg.cable_preload_offset_m
+                        )
                 else:
                     p_ctrl, r_ctrl = (ir.pitch, ir.roll) if cfg.use_ir_camera_feedback else (0.0, 0.0)
                     for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
@@ -189,9 +170,6 @@ def main():
                 t_name: abs(float(data.actuator(c_name).force.item()))
                 for c_name, t_name in zip(capstan_names, tendon_names)
             }
-            for cables in bar_cables_by_joint:
-                for _, t_name, _, _ in cables:
-                    forces[t_name] = abs(float(data.actuator(f"cap_{t_name}").force.item()))
 
             is_stopped = all(abs(v) < STOP_WHEEL_VEL_EPS for v in wheel_vels)
             if is_stopped:
@@ -228,6 +206,10 @@ def main():
                     extra_metrics[f"joint{n}/ball_yaw_meas_deg"] = round(float(np.rad2deg(b_yaw)), 3)
                     extra_metrics[f"joint{n}/ball_pitch_meas_deg"] = round(float(np.rad2deg(b_pitch)), 3)
                     extra_metrics[f"joint{n}/ball_roll_meas_deg"] = round(float(np.rad2deg(b_roll)), 3)
+                    extra_metrics[f"joint{n}/rear_yaw_torque_Nm"] = round(
+                        float(data.actuator(f"act_yaw_rear_{n}").force.item()), 3)
+                    extra_metrics[f"joint{n}/front_yaw_torque_Nm"] = round(
+                        float(data.actuator(f"act_yaw_front_{n + 1}").force.item()), 3)
                     extra_metrics[f"joint{n}/axle_dist_kin_m"] = round(
                         axle_distance(
                             psi_r_meas, psi_f_meas, (b_yaw, b_pitch, b_roll),
@@ -239,19 +221,11 @@ def main():
             joint_cables = []
             for j_idx in range(cfg.num_joints):
                 cables_j = {}
-                if trailer_cables:
-                    for k, (code, _, _) in enumerate(CORNER_SIGNS):
-                        c_idx = 4 * j_idx + k
-                        t_name = tendon_names[c_idx]
-                        c_name = capstan_names[c_idx]
-                        cables_j[code] = (
-                            float(data.actuator(c_name).ctrl.item()),
-                            float(data.tendon(t_name).length.item()),
-                            abs(float(data.actuator(c_name).force.item())),
-                        )
-                for key, t_name, _, _ in bar_cables_by_joint[j_idx]:
-                    c_name = f"cap_{t_name}"
-                    cables_j[key] = (
+                for k, (code, _, _) in enumerate(CORNER_SIGNS):
+                    c_idx = 4 * j_idx + k
+                    t_name = tendon_names[c_idx]
+                    c_name = capstan_names[c_idx]
+                    cables_j[code] = (
                         float(data.actuator(c_name).ctrl.item()),
                         float(data.tendon(t_name).length.item()),
                         abs(float(data.actuator(c_name).force.item())),

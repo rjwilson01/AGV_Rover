@@ -1,3 +1,4 @@
+from bar_geometry import pivot_x_m, validate_bar_config
 from config import AGVConfig
 
 SITE_CORNERS = (
@@ -337,10 +338,129 @@ def _build_trailer_body(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
     return "\n".join(lines)
 
 
+def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
+    """Trailer body for the yaw-tube drawbar build (cfg.bar_yaw_control). Geometry: see bar_geometry.py.
+
+    Chain per hitch:  trailer j -> rear tube (yaw hinge at pivot) -> rear slider (slide) -> ball joint
+    -> front tube (slide along the front bar) -> trailer j+1 (yaw hinge at its front pivot).
+    Joints: yaw_rear_{j}, slide_rear_{j}, ball_joint_{j}, slide_front_{j+1}, yaw_front_{j+1}.
+    """
+    out: list[str] = []
+
+    def add(level: int, text: str) -> None:
+        out.append("\t" * (depth + level) + text)
+
+    is_lead = (idx == 1)
+    is_last = (idx == cfg.num_trailers)
+    cx = cfg.chassis_half_len_m
+    p = pivot_x_m(cfg)
+    r_min, r_max = cfg.rear_bar_range_m
+    f_min, f_max = cfg.front_bar_range_m
+    s_r_min, s_r_max = r_min - p, r_max - p      # pivot-to-ball reach of the rear bar
+    s_f_min, s_f_max = f_min - p, f_max - p      # pivot-to-ball reach of the front bar
+    has_rear_slider = r_max > r_min
+    has_front_slider = f_max > f_min
+    a, w = cfg.bar_cable_arm_m, cfg.bar_cable_tube_half_width_m
+    ya = cfg.cable_anchor_y_m
+    margin = cfg.bar_yaw_hinge_margin_deg
+    rear_lo, rear_hi = cfg.rear_bar_yaw_range_deg[0] - margin, cfg.rear_bar_yaw_range_deg[1] + margin
+    front_lo, front_hi = cfg.front_bar_yaw_range_deg[0] - margin, cfg.front_bar_yaw_range_deg[1] + margin
+    damp = cfg.bar_yaw_damping
+
+    if is_lead:
+        add(0, f'<body name="trailer_{idx}" pos="0 0 {cfg.wheel_radius_m - cfg.wheel_z_offset_m:.3f}">')
+        add(1, '<freejoint name="root_jnt"/>')
+        lv = 1
+    else:
+        j_idx = idx - 1
+        rod_len_f = max(0.05, s_f_min - 0.02)
+        add(0, f'<body name="t{idx}_front_socket" pos="0 0 0">')
+        add(1, f'<joint name="ball_joint_{j_idx}" type="ball" pos="0 0 0" '
+               f'damping="{cfg.ball_joint_damping}" limited="true" range="0 {cfg.ball_joint_limit_deg}"/>')
+        add(1, f'<geom name="hitch_{j_idx}_ball" type="sphere" pos="0 0 0" size="0.036" material="cable_mat"/>')
+        # Front bar (rod) is fixed to the ball socket and slides inside the front tube
+        add(1, f'<geom name="t{idx}_drawbar_front_rod" type="capsule" fromto="0 0 0 -{rod_len_f:.3f} 0 0" '
+               f'size="0.022" mass="2.0" material="drawbar" contype="0" conaffinity="0"/>')
+        # Front tube: origin is the pivot, it slides along the bar to change the bar length
+        add(1, f'<body name="t{idx}_front_tube" pos="{-s_f_max:.3f} 0 0">')
+        if has_front_slider:
+            add(2, f'<joint name="slide_front_{idx}" type="slide" axis="1 0 0" '
+                   f'limited="true" range="0 {f_max - f_min:.4f}" damping="300"/>')
+        add(2, f'<geom name="t{idx}_drawbar_front_tube" type="capsule" fromto="0 0 0 {max(0.05, s_f_min - 0.02):.3f} 0 0" '
+               f'size="0.032" mass="3.0" material="drawbar" contype="0" conaffinity="0"/>')
+        add(2, f'<site name="t{idx}_front_tube_l" pos="{a:.3f} {w:.3f} 0" size="0.012"/>')
+        add(2, f'<site name="t{idx}_front_tube_r" pos="{a:.3f} {-w:.3f} 0" size="0.012"/>')
+        # The trailer pivots about the tube origin (its front pivot, p ahead of the trailer centre)
+        add(2, f'<body name="trailer_{idx}" pos="{-p:.3f} 0 0">')
+        add(3, f'<joint name="yaw_front_{idx}" type="hinge" axis="0 0 1" pos="{p:.3f} 0 0" '
+               f'damping="{damp}" limited="true" range="{front_lo:.2f} {front_hi:.2f}"/>')
+        add(3, f'<site name="t{idx}_front_anchor_l" pos="{cx:.3f} {ya:.3f} 0" size="0.012"/>')
+        add(3, f'<site name="t{idx}_front_anchor_r" pos="{cx:.3f} {-ya:.3f} 0" size="0.012"/>')
+        if cfg.keep_trailer_cables:
+            for code, ys, zs in SITE_CORNERS:
+                add(3, f'<site name="j_t{idx}_b{code}" '
+                       f'pos="{cx:.3f} {ys * cfg.cable_anchor_y_m:.3f} {zs * cfg.cable_anchor_z_m:.3f}" size="0.015"/>')
+        lv = 3
+
+    mass = cfg.lead_dry_mass_kg if is_lead else cfg.trailer_dry_mass_kg
+    mat = "chassis_lead" if is_lead else "chassis_trl"
+    add(lv, f'<geom name="t{idx}_chassis" type="box" '
+            f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass:.1f}" material="{mat}"/>')
+    slosh_xml = _build_slosh_tank_xml(idx, cfg, "\t" * (depth + lv))
+    if slosh_xml:
+        out.append(slosh_xml)
+
+    for side, y_sign in (("l", 1), ("r", -1)):
+        add(lv, f'<body name="t{idx}_{side}" pos="0 {y_sign * cfg.wheel_y_offset_m:.3f} {cfg.wheel_z_offset_m:.3f}">')
+        add(lv + 1, f'<joint name="j_t{idx}_{side}" type="hinge" axis="0 1 0"/>')
+        add(lv + 1, f'<geom type="cylinder" size="{cfg.wheel_radius_m:.3f} {cfg.wheel_half_width_m:.3f}" '
+                    f'euler="90 0 0" mass="{cfg.wheel_mass_kg:.1f}" material="tire"/>')
+        add(lv, '</body>')
+
+    if not is_last:
+        if cfg.keep_trailer_cables:
+            for code, ys, zs in SITE_CORNERS:
+                add(lv, f'<site name="j_t{idx}_f{code}" '
+                        f'pos="-{cx:.3f} {ys * cfg.cable_anchor_y_m:.3f} {zs * cfg.cable_anchor_z_m:.3f}" size="0.015"/>')
+        add(lv, f'<site name="t{idx}_rear_anchor_l" pos="-{cx:.3f} {ya:.3f} 0" size="0.012"/>')
+        add(lv, f'<site name="t{idx}_rear_anchor_r" pos="-{cx:.3f} {-ya:.3f} 0" size="0.012"/>')
+
+        # Rear tube pivots (yaw) about a point p behind the trailer centre
+        add(lv, f'<body name="t{idx}_rear_tube" pos="{-p:.3f} 0 0">')
+        add(lv + 1, f'<joint name="yaw_rear_{idx}" type="hinge" axis="0 0 1" '
+                    f'damping="{damp}" limited="true" range="{rear_lo:.2f} {rear_hi:.2f}"/>')
+        add(lv + 1, f'<geom name="t{idx}_drawbar_rear_tube" type="capsule" fromto="0 0 0 -{max(0.05, s_r_min - 0.02):.3f} 0 0" '
+                    f'size="0.032" mass="3.0" material="drawbar" contype="0" conaffinity="0"/>')
+        add(lv + 1, f'<site name="t{idx}_rear_tube_l" pos="-{a:.3f} {w:.3f} 0" size="0.012"/>')
+        add(lv + 1, f'<site name="t{idx}_rear_tube_r" pos="-{a:.3f} {-w:.3f} 0" size="0.012"/>')
+        # Rear bar (rod) slides inside the rear tube; its tip carries the next trailer's ball joint
+        add(lv + 1, f'<body name="t{idx}_rear_slider" pos="{-s_r_max:.3f} 0 0">')
+        if has_rear_slider:
+            add(lv + 2, f'<joint name="slide_rear_{idx}" type="slide" axis="1 0 0" '
+                        f'limited="true" range="0 {r_max - r_min:.4f}" damping="300"/>')
+        add(lv + 2, f'<geom name="t{idx}_drawbar_rear_rod" type="capsule" fromto="{max(0.05, s_r_min - 0.02):.3f} 0 0 0 0 0" '
+                    f'size="0.022" mass="2.0" material="drawbar" contype="0" conaffinity="0"/>')
+        out.append(_build_trailer_body_bars(idx + 1, cfg, depth + lv + 2))
+        add(lv + 1, '</body>')
+        add(lv, '</body>')
+
+    add(lv - 1, '</body>')          # trailer body
+    if not is_lead:
+        add(1, '</body>')           # front tube
+        add(0, '</body>')           # front socket
+    return "\n".join(out)
+
+
 def generate_mujoco_xml(cfg: AGVConfig) -> str:
-    trailers_xml = _build_trailer_body(1, cfg)
-    tendons, wheel_acts, capstan_acts, slide_acts = [], [], [], []
     is_var = (cfg.drawbar_mode == "variable")
+    bars = cfg.bar_yaw_control
+    if bars and not is_var:
+        raise ValueError("[bars] yaw_control = true requires drawbar mode = \"variable\"")
+    if bars:
+        validate_bar_config(cfg)
+    trailer_cables = (not bars) or cfg.keep_trailer_cables
+    trailers_xml = _build_trailer_body_bars(1, cfg) if bars else _build_trailer_body(1, cfg)
+    tendons, wheel_acts, capstan_acts, slide_acts = [], [], [], []
     r_min, r_max = cfg.rear_bar_range_m
     f_min, f_max = cfg.front_bar_range_m
 
@@ -351,7 +471,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 
     for i in range(1, cfg.num_trailers):
         nxt = i + 1
-        for code, _, _ in SITE_CORNERS:
+        for code, _, _ in (SITE_CORNERS if trailer_cables else ()):
             t_name = f"t{i}_t{nxt}_{code}"
             tendons.append(
                 f'\t\t<spatial name="{t_name}" width="0.005" damping="200" material="cable_mat">\n'
@@ -363,6 +483,22 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
                 f'\t\t<position name="cap_{t_name}" tendon="{t_name}" '
                 f'kp="{cfg.capstan_kp}" kv="{cfg.capstan_kv}" forcerange="-{cfg.capstan_max_pull_n} 0"/>'
             )
+
+        if bars:
+            # Two horizontal pull/pull cables per tube: rear tube of trailer i, front tube of trailer nxt
+            for owner, kind in ((i, "rear"), (nxt, "front")):
+                for side in ("l", "r"):
+                    t_name = f"bar_t{owner}_{kind}_{side}"
+                    tendons.append(
+                        f'\t\t<spatial name="{t_name}" width="0.005" damping="200" material="cable_mat">\n'
+                        f'\t\t\t<site site="t{owner}_{kind}_anchor_{side}"/>\n'
+                        f'\t\t\t<site site="t{owner}_{kind}_tube_{side}"/>\n'
+                        f'\t\t</spatial>'
+                    )
+                    capstan_acts.append(
+                        f'\t\t<position name="cap_{t_name}" tendon="{t_name}" '
+                        f'kp="{cfg.capstan_kp}" kv="{cfg.capstan_kv}" forcerange="-{cfg.capstan_max_pull_n} 0"/>'
+                    )
 
         if is_var and (r_max > r_min):
             slide_acts.append(

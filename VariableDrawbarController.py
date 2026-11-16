@@ -1,5 +1,5 @@
 import numpy as np
-from BaseSnakeController import BaseSnakeController, STRAIGHT_LINE_YAW_EPS
+from BaseSnakeController import BaseSnakeController, NUMERIC_EPS, STRAIGHT_LINE_YAW_EPS
 
 
 class VariableDrawbarController(BaseSnakeController):
@@ -33,6 +33,7 @@ class VariableDrawbarController(BaseSnakeController):
 
         joint_yaws = []
         bar_lengths = []
+        bar_yaws = []
         cum_dist_m = 0.0
 
         for j in range(self.num_joints):
@@ -52,6 +53,21 @@ class VariableDrawbarController(BaseSnakeController):
 
             raw_yaw = self.cfg.yaw_gain * (np.arctan(r_cmd * k_j) + np.arctan(f_cmd * k_j))
             psi_cmd = float(np.clip(raw_yaw, self.yaw_min_rad, self.yaw_max_rad))
+
+            # Split the joint yaw between the two bar tubes: each arctan term is that bar's own
+            # steady-state angle. If the joint limit clipped the total, shrink both bars equally.
+            # Each tube is then limited to its own range; whatever is left over (psi - rear - front)
+            # is taken by the passive ball joint.
+            yaw_r = self.cfg.yaw_gain * float(np.arctan(r_cmd * k_j))
+            yaw_f = self.cfg.yaw_gain * float(np.arctan(f_cmd * k_j))
+            if abs(raw_yaw) > NUMERIC_EPS and abs(raw_yaw) > abs(psi_cmd):
+                scale = psi_cmd / raw_yaw
+                yaw_r *= scale
+                yaw_f *= scale
+            bar_yaws.append((
+                float(np.clip(yaw_r, self.rear_yaw_min_rad, self.rear_yaw_max_rad)),
+                float(np.clip(yaw_f, self.front_yaw_min_rad, self.front_yaw_max_rad)),
+            ))
 
             joint_yaws.append(psi_cmd)
             bar_lengths.append((r_cmd, f_cmd))
@@ -79,6 +95,7 @@ class VariableDrawbarController(BaseSnakeController):
 
         self.last_joint_yaws = list(joint_yaws)
         self.last_bar_lengths = list(bar_lengths)
+        self.last_bar_yaws = list(bar_yaws)
         return wheel_vels, joint_yaws, bar_lengths
     
     def get_telemetry(self) -> dict[str, float]:

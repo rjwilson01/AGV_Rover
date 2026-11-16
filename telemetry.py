@@ -8,7 +8,8 @@ from pj_launcher import launch_plotjuggler
 
 
 class TelemetryManager:
-    def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False, launch_pj=True):
+    def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False, launch_pj=True,
+                 bar_yaw=False):
         self.addr = (udp_host, udp_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.enable_csv = enable_csv
@@ -16,7 +17,9 @@ class TelemetryManager:
         self.csv_rows = []
         self.last_stream = 0.0
         print(f"[Telemetry] UDP target: {self.addr[0]}:{self.addr[1]} | CSV enabled: {self.enable_csv}")
-        self.pj_proc = launch_plotjuggler(base_dir, udp_port=udp_port, num_joints=2) if launch_pj else None
+        self.pj_proc = (
+            launch_plotjuggler(base_dir, udp_port=udp_port, num_joints=2, bar_yaw=bar_yaw) if launch_pj else None
+        )
 
     def update(
         self,
@@ -72,7 +75,10 @@ class TelemetryManager:
                 r_meas = row.get(f"joint{idx}/rear_bar_meas_m")
                 f_meas = row.get(f"joint{idx}/front_bar_meas_m")
                 if r_meas is not None and f_meas is not None:
-                    d_kin = float(np.sqrt(r_meas**2 + f_meas**2 + 2.0 * r_meas * f_meas * np.cos(yaw_meas)))
+                    # Yaw-tube builds supply a geometry-based value (the formula below assumes straight bars)
+                    d_kin = row.get(f"joint{idx}/axle_dist_kin_m")
+                    if d_kin is None:
+                        d_kin = float(np.sqrt(r_meas**2 + f_meas**2 + 2.0 * r_meas * f_meas * np.cos(yaw_meas)))
                     p_front = np.asarray(trailer_positions[idx - 1])
                     p_rear = np.asarray(trailer_positions[idx])
                     d_act = float(np.linalg.norm(p_front - p_rear))

@@ -27,8 +27,7 @@ class TelemetryManager:
         self.enable_csv = enable_csv
         self.meta = {"log_version": 1, "git_commit": _git_version(base_dir),
                      "started": time.strftime("%Y-%m-%dT%H:%M:%S"), **(meta or {})}
-        tag = str(self.meta.get("controller", "sim"))
-        self.csv_path = base_dir / f"sim_log_{tag}_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+        self.csv_path = base_dir / "sim_log.csv"   # same file every run: just overwrite it, then git push
         self.csv_rows = []
         self.last_stream = 0.0
         print(f"[Telemetry] UDP target: {self.addr[0]}:{self.addr[1]} | CSV enabled: {self.enable_csv}")

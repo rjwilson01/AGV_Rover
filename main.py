@@ -116,7 +116,9 @@ def main():
                     c_idx = 4 * j_idx + k
                     data.actuator(capstan_names[c_idx]).ctrl = (
                         calc_cable_len(
-                            -y_cmd, p_ctrl, r_ctrl, ys, zs, cfg,
+                            # calc_cable_len uses a mirrored x axis: it matches the XML geometry for
+                            # (yaw, pitch, roll) = (-in_yaw, -in_pitch, in_roll), so pitch must be negated too.
+                            -y_cmd, -p_ctrl, r_ctrl, ys, zs, cfg,
                             rear_bar_m=r_cmd, front_bar_m=f_cmd,
                         )
                         - cfg.cable_preload_offset_m

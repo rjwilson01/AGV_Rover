@@ -61,6 +61,11 @@ class BaseSnakeController(ABC):
         self.num_joints = cfg.num_trailers - 1
         self.yaw_min_rad = np.deg2rad(cfg.yaw_angle_range_deg[0])
         self.yaw_max_rad = np.deg2rad(cfg.yaw_angle_range_deg[1])
+        # Per-bar tube yaw limits (used when cfg.bar_yaw_control is on)
+        self.rear_yaw_min_rad = np.deg2rad(cfg.rear_bar_yaw_range_deg[0])
+        self.rear_yaw_max_rad = np.deg2rad(cfg.rear_bar_yaw_range_deg[1])
+        self.front_yaw_min_rad = np.deg2rad(cfg.front_bar_yaw_range_deg[0])
+        self.front_yaw_max_rad = np.deg2rad(cfg.front_bar_yaw_range_deg[1])
 
         self.path_history: deque[tuple[float, float]] = deque(maxlen=PATH_HISTORY_MAX_SAMPLES)
         self.reset()
@@ -72,6 +77,9 @@ class BaseSnakeController(ABC):
         self.last_lookahead = None
         self.last_joint_yaws = [0.0] * self.num_joints
         self.last_ir_readings = [(0.0, 0.0, 0.0)] * self.num_joints
+        # Commanded tube yaw per hitch: (rear bar of trailer j, front bar of trailer j+1), radians.
+        # Their sum plus the ball yaw equals the commanded trailer-to-trailer yaw in last_joint_yaws.
+        self.last_bar_yaws = [(0.0, 0.0)] * self.num_joints
         self.last_bar_lengths = [
             (self.cfg.nominal_rear_bar_m, self.cfg.nominal_front_bar_m)
             for _ in range(self.num_joints)

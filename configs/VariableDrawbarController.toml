@@ -3,6 +3,8 @@ controller_class = "VariableDrawbarController"
 mode = "variable"
 rear_bar_range_m = [1.00, 1.50]
 front_bar_range_m = [1.00, 1.50]
+# Limit on the commanded trailer-to-trailer yaw per hitch (rear bar yaw + front bar yaw + ball yaw).
+# The per-bar tube limits are in [bars] below; ball_joint_limit_deg is the physical stop on the ball.
 yaw_angle_range_deg = [-40.0, 50.0]
 telescoping_kp = 18000.0
 telescoping_kv = 900.0
@@ -18,3 +20,19 @@ lookahead_dist_m = 1.60
 max_curvature = 0.55
 yaw_gain = -1.00
 actuator_lead_offset_m = 0.35
+
+[bars]
+# Each drawbar sits in a tube that pivots (yaw) near the trailer edge. The simulation commands the tube
+# yaw angle directly (the real build drives it with pull/pull cables); the bar length is the separate
+# slider actuator. The ball joint between the two bar tips is passive, and the 4 trailer-to-trailer
+# cables are kept as on the Fixed build. Values below are PLACEHOLDERS - replace with the real build.
+yaw_control = true
+rear_yaw_range_deg = [-25.0, 25.0]    # commanded yaw range of each rear tube (rear bar of trailer n)
+front_yaw_range_deg = [-25.0, 25.0]   # commanded yaw range of each front tube (front bar of trailer n+1)
+pivot_inset_m = 0.05                  # tube pivot sits this far inside the chassis end
+yaw_kp = 400.0                        # tube yaw position actuator gain (N*m per rad)
+yaw_kv = 20.0                         # tube yaw actuator damping (N*m per rad/s)
+yaw_max_torque_nm = 200.0
+yaw_damping = 2.0                     # passive hinge damping
+yaw_hinge_margin_deg = 5.0            # hinge stop sits this far beyond the commanded range
+

@@ -1,14 +1,16 @@
 from pathlib import Path
 import sys
 import time
+import numpy as np
 import mujoco
 import mujoco.viewer
 
+from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import load_config
-from ir_camera import IRCameraModel
+from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
-from viewer_overlay import render_path_overlay
+from viewer_overlay import render_bar_yaw_overlay, render_path_overlay
 from xml_builder import generate_mujoco_xml
 
 CORNER_SIGNS = (
@@ -40,6 +42,18 @@ def main():
         udp_host=cfg.udp_host,
         udp_port=cfg.udp_port,
         enable_csv=cfg.save_csv_log,
+        bar_yaw=cfg.bar_yaw_control,
+        meta={
+            "controller": cfg.controller_class,
+            "drawbar_mode": cfg.drawbar_mode,
+            "bar_yaw_control": cfg.bar_yaw_control,
+            "num_trailers": cfg.num_trailers,
+            "ir_noise_std_deg": cfg.ir_noise_std_deg,
+            "ir_latency_s": cfg.ir_latency_s,
+            "use_ir_camera_feedback": cfg.use_ir_camera_feedback,
+            "bar_yaw_kp": cfg.bar_yaw_kp,
+            "bar_yaw_kv": cfg.bar_yaw_kv,
+        },
     )
 
     wheel_names = [
@@ -48,6 +62,7 @@ def main():
         for side in ("l", "r")
     ]
     joint_names = [f"ball_joint_{j}" for j in range(1, cfg.num_trailers)]
+    bars = cfg.bar_yaw_control
     tendon_names = [
         f"t{j}_t{j + 1}_{code}"
         for j in range(1, cfg.num_trailers)
@@ -61,6 +76,10 @@ def main():
         neutral_len = calc_cable_len(0.0, 0.0, 0.0, 1.0, 1.0, cfg) - cfg.cable_preload_offset_m
         for cname in capstan_names:
             data.actuator(cname).ctrl = neutral_len
+        if bars:
+            for j in range(1, cfg.num_trailers):
+                data.actuator(f"act_yaw_rear_{j}").ctrl = 0.0
+                data.actuator(f"act_yaw_front_{j + 1}").ctrl = 0.0
 
     apply_neutral_controls()
     prev_sim_time = 0.0
@@ -98,7 +117,13 @@ def main():
             for w_name, w_vel in zip(wheel_names, wheel_vels):
                 data.actuator(w_name).ctrl = w_vel
 
-            joint_eulers = [quat_to_euler(data.joint(j_name).qpos) for j_name in joint_names]
+            if bars:
+                # With yaw tubes the ball joint is only part of the hitch: use the true trailer-to-trailer R/P/Y.
+                joint_eulers = [
+                    tuple(relative_euler(trailer_quats[j], trailer_quats[j + 1])) for j in range(cfg.num_joints)
+                ]
+            else:
+                joint_eulers = [quat_to_euler(data.joint(j_name).qpos) for j_name in joint_names]
             _, r_max = cfg.rear_bar_range_m
             _, f_max = cfg.front_bar_range_m
 
@@ -111,21 +136,45 @@ def main():
                     data.actuator(front_act).ctrl = f_max - f_cmd
 
                 ir = ir_readings[j_idx]
-                p_ctrl, r_ctrl = (ir.pitch, ir.roll) if cfg.use_ir_camera_feedback else (0.0, 0.0)
-                for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
-                    c_idx = 4 * j_idx + k
-                    data.actuator(capstan_names[c_idx]).ctrl = (
-                        calc_cable_len(
-                            -y_cmd, p_ctrl, r_ctrl, ys, zs, cfg,
-                            rear_bar_m=r_cmd, front_bar_m=f_cmd,
+                if bars:
+                    psi_r, psi_f = controller.last_bar_yaws[j_idx]
+                    y_ball_cmd = y_cmd - psi_r - psi_f          # what the tubes cannot take goes to the ball
+                    # Hold the ball's current pitch/roll: IR trailer R/P/Y minus the measured tube angles
+                    if cfg.use_ir_camera_feedback:
+                        psi_r_meas = float(data.joint(f"yaw_rear_{j_idx + 1}").qpos.item())
+                        psi_f_meas = float(data.joint(f"yaw_front_{j_idx + 2}").qpos.item())
+                        _, p_ball, r_ball = ball_ypr_from_trailer_relative(
+                            (ir.yaw, ir.pitch, ir.roll), psi_r_meas, psi_f_meas
                         )
-                        - cfg.cable_preload_offset_m
-                    )
+                    else:
+                        p_ball = r_ball = 0.0
+                    data.actuator(f"act_yaw_rear_{j_idx + 1}").ctrl = psi_r
+                    data.actuator(f"act_yaw_front_{j_idx + 2}").ctrl = psi_f
+                    for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
+                        data.actuator(capstan_names[4 * j_idx + k]).ctrl = (
+                            trailer_cable_len(psi_r, psi_f, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cmd, f_cmd)
+                            - cfg.cable_preload_offset_m
+                        )
+                else:
+                    p_ctrl, r_ctrl = (ir.pitch, ir.roll) if cfg.use_ir_camera_feedback else (0.0, 0.0)
+                    for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
+                        c_idx = 4 * j_idx + k
+                        data.actuator(capstan_names[c_idx]).ctrl = (
+                            calc_cable_len(
+                                # calc_cable_len uses a mirrored x axis: it matches the XML geometry for
+                                # (yaw, pitch, roll) = (-in_yaw, -in_pitch, in_roll), so pitch must be negated too.
+                                -y_cmd, -p_ctrl, r_ctrl, ys, zs, cfg,
+                                rear_bar_m=r_cmd, front_bar_m=f_cmd,
+                            )
+                            - cfg.cable_preload_offset_m
+                        )
 
             mujoco.mj_step(model, data)
 
             with viewer.lock():
                 render_path_overlay(viewer, cfg.waypoints, controller.last_lookahead)
+                if bars:
+                    render_bar_yaw_overlay(viewer, data, cfg, controller.last_bar_yaws, controller.last_bar_lengths)
             viewer.sync()
 
             forces = {
@@ -140,15 +189,45 @@ def main():
                 post_stop_time = 0.0
 
             extra_metrics = controller.get_telemetry()
+            bar_meas_raw = [(r_max, f_max)] * cfg.num_joints    # unrounded, for the geometry below
             for j_idx in range(cfg.num_joints):
                 r_jnt = f"slide_rear_{j_idx + 1}"
                 f_jnt = f"slide_front_{j_idx + 2}"
-                extra_metrics[f"joint{j_idx + 1}/rear_bar_meas_m"] = round(
-                    r_max - float(data.joint(r_jnt).qpos.item()) if r_jnt in joint_names_set else r_max, 4
-                )
-                extra_metrics[f"joint{j_idx + 1}/front_bar_meas_m"] = round(
-                    f_max - float(data.joint(f_jnt).qpos.item()) if f_jnt in joint_names_set else f_max, 4
-                )
+                r_meas_raw = r_max - float(data.joint(r_jnt).qpos.item()) if r_jnt in joint_names_set else r_max
+                f_meas_raw = f_max - float(data.joint(f_jnt).qpos.item()) if f_jnt in joint_names_set else f_max
+                bar_meas_raw[j_idx] = (r_meas_raw, f_meas_raw)
+                extra_metrics[f"joint{j_idx + 1}/rear_bar_meas_m"] = round(r_meas_raw, 4)
+                extra_metrics[f"joint{j_idx + 1}/front_bar_meas_m"] = round(f_meas_raw, 4)
+            if bars:
+                # Per-bar tube yaw (commanded vs measured by the tube hinge), the ball joint, and the
+                # axle distance implied by the measured geometry (compared with the real one in telemetry)
+                for j_idx in range(cfg.num_joints):
+                    n = j_idx + 1
+                    psi_r_cmd, psi_f_cmd = controller.last_bar_yaws[j_idx]
+                    psi_r_meas = float(data.joint(f"yaw_rear_{n}").qpos.item())
+                    psi_f_meas = float(data.joint(f"yaw_front_{n + 1}").qpos.item())
+                    b_yaw, b_pitch, b_roll = quat_to_euler(data.joint(f"ball_joint_{n}").qpos)
+                    extra_metrics[f"joint{n}/rear_yaw_cmd_deg"] = round(float(np.rad2deg(psi_r_cmd)), 3)
+                    extra_metrics[f"joint{n}/rear_yaw_meas_deg"] = round(float(np.rad2deg(psi_r_meas)), 3)
+                    extra_metrics[f"joint{n}/front_yaw_cmd_deg"] = round(float(np.rad2deg(psi_f_cmd)), 3)
+                    extra_metrics[f"joint{n}/front_yaw_meas_deg"] = round(float(np.rad2deg(psi_f_meas)), 3)
+                    extra_metrics[f"joint{n}/ball_yaw_cmd_deg"] = round(
+                        float(np.rad2deg(joint_yaws[j_idx] - psi_r_cmd - psi_f_cmd)), 3
+                    )
+                    extra_metrics[f"joint{n}/ball_yaw_meas_deg"] = round(float(np.rad2deg(b_yaw)), 3)
+                    extra_metrics[f"joint{n}/ball_pitch_meas_deg"] = round(float(np.rad2deg(b_pitch)), 3)
+                    extra_metrics[f"joint{n}/ball_roll_meas_deg"] = round(float(np.rad2deg(b_roll)), 3)
+                    extra_metrics[f"joint{n}/rear_yaw_torque_Nm"] = round(
+                        float(data.actuator(f"act_yaw_rear_{n}").force.item()), 3)
+                    extra_metrics[f"joint{n}/front_yaw_torque_Nm"] = round(
+                        float(data.actuator(f"act_yaw_front_{n + 1}").force.item()), 3)
+                    extra_metrics[f"joint{n}/axle_dist_kin_m"] = round(
+                        axle_distance(
+                            psi_r_meas, psi_f_meas, (b_yaw, b_pitch, b_roll),
+                            bar_meas_raw[j_idx][0], bar_meas_raw[j_idx][1], cfg,
+                        ),
+                        4,
+                    )
             # Put the cables into a per joint list
             joint_cables = []
             for j_idx in range(cfg.num_joints):

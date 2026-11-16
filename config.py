@@ -88,6 +88,17 @@ class AGVConfig:
     ir_quantization_deg: float = 0.0
     ir_seed: int = 0
 
+    # Yaw-controlled drawbar tubes (see bar_geometry.py). Off = original rigid bars.
+    bar_yaw_control: bool = False
+    rear_bar_yaw_range_deg: tuple[float, float] = (-25.0, 25.0)
+    front_bar_yaw_range_deg: tuple[float, float] = (-25.0, 25.0)
+    bar_pivot_inset_m: float = 0.05             # tube pivot sits this far inside the chassis end
+    bar_yaw_kp: float = 400.0                   # tube yaw position actuator gain (N*m per rad)
+    bar_yaw_kv: float = 20.0                    # tube yaw actuator damping (N*m per rad/s)
+    bar_yaw_max_torque_nm: float = 200.0
+    bar_yaw_damping: float = 2.0                # passive hinge damping
+    bar_yaw_hinge_margin_deg: float = 5.0       # hinge stop sits this far beyond the commanded range
+
     # --- Derived Properties ---
     @property
     def num_joints(self) -> int:
@@ -142,6 +153,7 @@ def load_config(
     sim = raw["simulation"]
     v = raw["viewer"]
     ir = raw.get("ir_camera", {})
+    bars = raw.get("bars", {})
 
     r_min, r_max = d["rear_bar_range_m"]
     f_min, f_max = d["front_bar_range_m"]
@@ -210,4 +222,13 @@ def load_config(
         ir_latency_s=float(ir.get("latency_s", 0.0)),
         ir_quantization_deg=float(ir.get("quantization_deg", 0.0)),
         ir_seed=int(ir.get("seed", 0)),
+        bar_yaw_control=bool(bars.get("yaw_control", False)),
+        rear_bar_yaw_range_deg=tuple(float(x) for x in bars.get("rear_yaw_range_deg", (-25.0, 25.0))),
+        front_bar_yaw_range_deg=tuple(float(x) for x in bars.get("front_yaw_range_deg", (-25.0, 25.0))),
+        bar_pivot_inset_m=float(bars.get("pivot_inset_m", 0.05)),
+        bar_yaw_kp=float(bars.get("yaw_kp", 400.0)),
+        bar_yaw_kv=float(bars.get("yaw_kv", 20.0)),
+        bar_yaw_max_torque_nm=float(bars.get("yaw_max_torque_nm", 200.0)),
+        bar_yaw_damping=float(bars.get("yaw_damping", 2.0)),
+        bar_yaw_hinge_margin_deg=float(bars.get("yaw_hinge_margin_deg", 5.0)),
     )

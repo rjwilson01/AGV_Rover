@@ -42,7 +42,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
-def build_plotjuggler_layout(layout_path: Path, udp_port: int = 9870, num_joints: int = 1) -> Path:
+def build_plotjuggler_layout(layout_path: Path, udp_port: int = 9870, num_joints: int = 1, bar_yaw: bool = False) -> Path:
     root = ET.Element(
         "root",
         binding="source",
@@ -123,6 +123,20 @@ def build_plotjuggler_layout(layout_path: Path, udp_port: int = 9870, num_joints
                 (f"joint{j}/yaw_cmd_deg", "#1f77b4"),
                 (f"joint{j}/yaw_meas_deg", "#ff7f0e"),
             ]),
+            # Yaw-tube builds only: commanded vs measured yaw of each drawbar tube, and the torque it takes
+            *([
+                ("Bar Yaw (deg)", [
+                    (f"joint{j}/rear_yaw_cmd_deg", "#1f77b4"),
+                    (f"joint{j}/rear_yaw_meas_deg", "#17becf"),
+                    (f"joint{j}/front_yaw_cmd_deg", "#d62728"),
+                    (f"joint{j}/front_yaw_meas_deg", "#ff7f0e"),
+                    (f"joint{j}/ball_yaw_meas_deg", "#7f7f7f"),
+                ]),
+                ("Bar Yaw Torque (Nm)", [
+                    (f"joint{j}/rear_yaw_torque_Nm", "#1f77b4"),
+                    (f"joint{j}/front_yaw_torque_Nm", "#d62728"),
+                ]),
+            ] if bar_yaw else []),
             ("Pitch & Roll (deg)", [
                 (f"joint{j}/pitch_meas_deg", "#2ca02c"),
                 (f"joint{j}/roll_meas_deg", "#9467bd"),
@@ -237,8 +251,8 @@ def _automate_pj4_startup(pid: int, layout_file: Path, timeout_s: float = 15.0) 
     pyautogui.press("enter")
 
 
-def launch_plotjuggler(base_dir: Path, udp_port: int = 9870, num_joints: int = 1) -> subprocess.Popen:
-    layout_file = build_plotjuggler_layout(base_dir / "pj_auto_layout.xml", udp_port, num_joints)
+def launch_plotjuggler(base_dir: Path, udp_port: int = 9870, num_joints: int = 1, bar_yaw: bool = False) -> subprocess.Popen:
+    layout_file = build_plotjuggler_layout(base_dir / "pj_auto_layout.xml", udp_port, num_joints, bar_yaw)
 
     env = os.environ.copy()
     env["PLOTJUGGLER_ACCEPT_PREVIOUSLY_USED_STREAMING_PLUGIN"] = "1"

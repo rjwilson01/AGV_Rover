@@ -49,7 +49,7 @@ joint_angle_kp = 0.35               # IR-camera joint angle P-trim against cable
 udp_host = "127.0.0.1"
 udp_port = 9870
 stream_hz = 50.0
-save_csv_log = false
+save_csv_log = true
 post_stop_log_sec = 2.0
 
 [viewer]

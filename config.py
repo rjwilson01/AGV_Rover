@@ -82,6 +82,12 @@ class AGVConfig:
     camera_azimuth_deg: float
     camera_elevation_deg: float
 
+    # Simulated IR camera (relative R/P/Y between adjacent trailers). Defaults = ideal sensor.
+    ir_noise_std_deg: float = 0.0
+    ir_latency_s: float = 0.0
+    ir_quantization_deg: float = 0.0
+    ir_seed: int = 0
+
     # --- Derived Properties ---
     @property
     def num_joints(self) -> int:
@@ -135,6 +141,7 @@ def load_config(
     c = raw["controller"]
     sim = raw["simulation"]
     v = raw["viewer"]
+    ir = raw.get("ir_camera", {})
 
     r_min, r_max = d["rear_bar_range_m"]
     f_min, f_max = d["front_bar_range_m"]
@@ -199,4 +206,8 @@ def load_config(
         camera_distance_m=float(v["camera_distance_m"]),
         camera_azimuth_deg=float(v["camera_azimuth_deg"]),
         camera_elevation_deg=float(v["camera_elevation_deg"]),
+        ir_noise_std_deg=float(ir.get("noise_std_deg", 0.0)),
+        ir_latency_s=float(ir.get("latency_s", 0.0)),
+        ir_quantization_deg=float(ir.get("quantization_deg", 0.0)),
+        ir_seed=int(ir.get("seed", 0)),
     )

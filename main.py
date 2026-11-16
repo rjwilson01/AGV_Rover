@@ -6,6 +6,7 @@ import mujoco.viewer
 
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import load_config
+from ir_camera import IRCameraModel
 from telemetry import TelemetryManager
 from viewer_overlay import render_path_overlay
 from xml_builder import generate_mujoco_xml
@@ -33,6 +34,7 @@ def main():
 
     lead_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trailer_1")
     controller = create_controller(cfg)
+    ir_camera = IRCameraModel(cfg)
     telemetry = TelemetryManager(
         base_dir,
         udp_host=cfg.udp_host,
@@ -75,6 +77,7 @@ def main():
             if data.time < prev_sim_time:
                 post_stop_time = 0.0
                 controller.reset()
+                ir_camera.reset()
                 apply_neutral_controls()
             prev_sim_time = data.time
 
@@ -85,7 +88,13 @@ def main():
             pos_xy = root_qpos[:2]
             lead_hdg, _, _ = quat_to_euler(root_qpos[3:7])
 
-            wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg)
+            # What the IR cameras see: relative R/P/Y between neighbouring trailers.
+            # Recompute body poses from current qpos (xquat lags one step after mj_step, and is unset at t=0).
+            mujoco.mj_kinematics(model, data)
+            trailer_quats = [data.body(f"trailer_{i}").xquat for i in range(1, cfg.num_trailers + 1)]
+            ir_readings = ir_camera.measure(t, trailer_quats)
+
+            wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
             for w_name, w_vel in zip(wheel_names, wheel_vels):
                 data.actuator(w_name).ctrl = w_vel
 
@@ -93,9 +102,7 @@ def main():
             _, r_max = cfg.rear_bar_range_m
             _, f_max = cfg.front_bar_range_m
 
-            for j_idx, (y_cmd, j_euler, (r_cmd, f_cmd)) in enumerate(
-                zip(joint_yaws, joint_eulers, bar_lengths)
-            ):
+            for j_idx, (y_cmd, (r_cmd, f_cmd)) in enumerate(zip(joint_yaws, bar_lengths)):
                 rear_act = f"act_slide_rear_{j_idx + 1}"
                 front_act = f"act_slide_front_{j_idx + 2}"
                 if rear_act in actuator_names:
@@ -103,8 +110,8 @@ def main():
                 if front_act in actuator_names:
                     data.actuator(front_act).ctrl = f_max - f_cmd
 
-                _, pitch_meas, roll_meas = j_euler
-                p_ctrl, r_ctrl = (pitch_meas, roll_meas) if cfg.use_ir_camera_feedback else (0.0, 0.0)
+                ir = ir_readings[j_idx]
+                p_ctrl, r_ctrl = (ir.pitch, ir.roll) if cfg.use_ir_camera_feedback else (0.0, 0.0)
                 for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
                     c_idx = 4 * j_idx + k
                     data.actuator(capstan_names[c_idx]).ctrl = (
@@ -162,7 +169,10 @@ def main():
                 for i in range(1, cfg.num_trailers + 1)
             ]
             if post_stop_time <= cfg.post_stop_log_sec:
-                telemetry.update(t, pos_xy, lead_hdg, joint_yaws, joint_eulers, forces, extra_metrics, joint_cables,trailer_positions,)
+                telemetry.update(
+                    t, pos_xy, lead_hdg, joint_yaws, joint_eulers, forces, extra_metrics,
+                    joint_cables, trailer_positions, ir_readings=ir_readings,
+                )
 
 
             elapsed = time.time() - step_start

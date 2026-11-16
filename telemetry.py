@@ -3,10 +3,12 @@ import json
 import socket
 from pathlib import Path
 import numpy as np
+from pj_launcher import launch_plotjuggler
+
 
 
 class TelemetryManager:
-    def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False):
+    def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False, launch_pj=True):
         self.addr = (udp_host, udp_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.enable_csv = enable_csv
@@ -14,7 +16,7 @@ class TelemetryManager:
         self.csv_rows = []
         self.last_stream = 0.0
         print(f"[Telemetry] UDP target: {self.addr[0]}:{self.addr[1]} | CSV enabled: {self.enable_csv}")
-
+        self.pj_proc = launch_plotjuggler(base_dir, udp_port=udp_port, num_joints=2) if launch_pj else None
 
     def update(
         self,
@@ -27,6 +29,7 @@ class TelemetryManager:
         extra_metrics: dict[str, float] | None = None,
         joint_cables: dict[str, tuple[float, float]] | None = None,
         trailer_positions: list[tuple[float, float, float]] | None = None,
+        ir_readings: list[tuple[float, float, float]] | None = None,
     ) -> None:
         # Handle simulator Reset (t jumps backward to 0.0) so rate-limiter doesn't stall
         if t < self.last_stream:
@@ -53,6 +56,16 @@ class TelemetryManager:
             row[f"joint{idx}/yaw_meas_deg"] = round(float(np.rad2deg(yaw_meas)), 3)
             row[f"joint{idx}/pitch_meas_deg"] = round(float(np.rad2deg(pitch_meas)), 3)
             row[f"joint{idx}/roll_meas_deg"] = round(float(np.rad2deg(roll_meas)), 3)
+
+            # IR camera reading (what the controller sees) and its error vs the true joint angle
+            if ir_readings is not None and idx - 1 < len(ir_readings):
+                ir_yaw, ir_pitch, ir_roll = ir_readings[idx - 1]
+                row[f"joint{idx}/ir_yaw_deg"] = round(float(np.rad2deg(ir_yaw)), 3)
+                row[f"joint{idx}/ir_pitch_deg"] = round(float(np.rad2deg(ir_pitch)), 3)
+                row[f"joint{idx}/ir_roll_deg"] = round(float(np.rad2deg(ir_roll)), 3)
+                row[f"joint{idx}/ir_yaw_err_deg"] = round(float(np.rad2deg(ir_yaw - yaw_meas)), 3)
+                row[f"joint{idx}/ir_pitch_err_deg"] = round(float(np.rad2deg(ir_pitch - pitch_meas)), 3)
+                row[f"joint{idx}/ir_roll_err_deg"] = round(float(np.rad2deg(ir_roll - roll_meas)), 3)
 
             # 1. Derived axle-to-axle distance
             if trailer_positions is not None and idx < len(trailer_positions):
@@ -89,6 +102,9 @@ class TelemetryManager:
 
     def close(self):
         self.sock.close()
+        if self.pj_proc is not None:
+            print(f"[Telemetry] Terminate PJ")
+            self.pj_proc.terminate()
         if self.enable_csv and self.csv_rows:
             with open(self.csv_path, "w", newline="") as f:
                 writer = csv.DictWriter(f, fieldnames=list(self.csv_rows[0].keys()))

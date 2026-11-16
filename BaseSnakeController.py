@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import deque
+from collections.abc import Sequence
 import importlib
 import numpy as np
 from config import AGVConfig
@@ -70,6 +71,7 @@ class BaseSnakeController(ABC):
         self.path_history.clear()
         self.last_lookahead = None
         self.last_joint_yaws = [0.0] * self.num_joints
+        self.last_ir_readings = [(0.0, 0.0, 0.0)] * self.num_joints
         self.last_bar_lengths = [
             (self.cfg.nominal_rear_bar_m, self.cfg.nominal_front_bar_m)
             for _ in range(self.num_joints)
@@ -131,9 +133,23 @@ class BaseSnakeController(ABC):
         lead_hdg_rad: float,
         v_center: float | None = None,
         lookahead_dist: float | None = None,
+        ir_readings: Sequence[tuple[float, float, float]] | None = None,
     ) -> tuple[list[float], list[float], list[tuple[float, float]]]:
-        """Returns (wheel_vels, joint_yaws, bar_lengths[(rear_m, front_m), ...])."""
+        """Returns (wheel_vels, joint_yaws, bar_lengths[(rear_m, front_m), ...]).
+
+        ir_readings: one (yaw, pitch, roll) in radians per joint, as reported by the
+        simulated IR camera (relative orientation of trailer j+1 in the frame of trailer j).
+        """
         ...
+
+    def _store_ir(self, ir_readings: Sequence[tuple[float, float, float]] | None) -> None:
+        """Keep the latest IR camera readings so control laws can use them."""
+        if ir_readings is not None:
+            self.last_ir_readings = [tuple(float(v) for v in r) for r in ir_readings]
+
+    def get_telemetry(self) -> dict[str, float]:
+        """Return controller-specific telemetry channels for PlotJuggler/CSV."""
+        return {}
 
 
 def create_controller(cfg: AGVConfig) -> BaseSnakeController:
@@ -142,7 +158,3 @@ def create_controller(cfg: AGVConfig) -> BaseSnakeController:
     module = importlib.import_module(cls_name)
     controller_cls = getattr(module, cls_name)
     return controller_cls(cfg)
-
-    def get_telemetry(self) -> dict[str, float]:
-        """Return controller-specific telemetry channels for PlotJuggler/CSV."""
-        return {}

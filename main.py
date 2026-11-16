@@ -43,6 +43,17 @@ def main():
         udp_port=cfg.udp_port,
         enable_csv=cfg.save_csv_log,
         bar_yaw=cfg.bar_yaw_control,
+        meta={
+            "controller": cfg.controller_class,
+            "drawbar_mode": cfg.drawbar_mode,
+            "bar_yaw_control": cfg.bar_yaw_control,
+            "num_trailers": cfg.num_trailers,
+            "ir_noise_std_deg": cfg.ir_noise_std_deg,
+            "ir_latency_s": cfg.ir_latency_s,
+            "use_ir_camera_feedback": cfg.use_ir_camera_feedback,
+            "bar_yaw_kp": cfg.bar_yaw_kp,
+            "bar_yaw_kv": cfg.bar_yaw_kv,
+        },
     )
 
     wheel_names = [

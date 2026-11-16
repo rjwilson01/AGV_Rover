@@ -1,19 +1,34 @@
 import csv
 import json
 import socket
+import subprocess
+import time
 from pathlib import Path
 import numpy as np
 from pj_launcher import launch_plotjuggler
 
 
 
+def _git_version(base_dir: Path) -> str:
+    """Short commit hash, with '-dirty' if there are uncommitted changes."""
+    try:
+        run = lambda *a: subprocess.run(["git", *a], cwd=base_dir, capture_output=True, text=True, timeout=5).stdout.strip()
+        h = run("rev-parse", "--short", "HEAD")
+        return (h + ("-dirty" if run("status", "--porcelain", "--untracked-files=no") else "")) if h else "unknown"
+    except Exception:
+        return "unknown"
+
+
 class TelemetryManager:
     def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False, launch_pj=True,
-                 bar_yaw=False):
+                 bar_yaw=False, meta=None):
         self.addr = (udp_host, udp_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.enable_csv = enable_csv
-        self.csv_path = base_dir / "sim_log.csv"
+        self.meta = {"log_version": 1, "git_commit": _git_version(base_dir),
+                     "started": time.strftime("%Y-%m-%dT%H:%M:%S"), **(meta or {})}
+        tag = str(self.meta.get("controller", "sim"))
+        self.csv_path = base_dir / f"sim_log_{tag}_{time.strftime('%Y%m%d_%H%M%S')}.csv"
         self.csv_rows = []
         self.last_stream = 0.0
         print(f"[Telemetry] UDP target: {self.addr[0]}:{self.addr[1]} | CSV enabled: {self.enable_csv}")
@@ -112,8 +127,11 @@ class TelemetryManager:
             print(f"[Telemetry] Terminate PJ")
             self.pj_proc.terminate()
         if self.enable_csv and self.csv_rows:
+            fields = list(dict.fromkeys(k for r in self.csv_rows for k in r))
             with open(self.csv_path, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=list(self.csv_rows[0].keys()))
+                for k, v in self.meta.items():
+                    f.write(f"# {k}: {v}\n")   # read with pandas.read_csv(path, comment="#")
+                writer = csv.DictWriter(f, fieldnames=fields, restval="")
                 writer.writeheader()
                 writer.writerows(self.csv_rows)
             print(f"Saved {len(self.csv_rows)} samples to {self.csv_path}")

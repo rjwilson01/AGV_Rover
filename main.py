@@ -189,6 +189,14 @@ def main():
                 post_stop_time = 0.0
 
             extra_metrics = controller.get_telemetry()
+            # Absolute attitude, height and wheel torque of each trailer (diagnoses cart rocking / drive reaction)
+            for i_t, q_t in enumerate(trailer_quats, start=1):
+                _, p_abs, r_abs = quat_to_euler(q_t)
+                extra_metrics[f"trailer{i_t}/pitch_abs_deg"] = round(float(np.rad2deg(p_abs)), 3)
+                extra_metrics[f"trailer{i_t}/roll_abs_deg"] = round(float(np.rad2deg(r_abs)), 3)
+                extra_metrics[f"trailer{i_t}/z_m"] = round(float(data.body(f"trailer_{i_t}").xpos[2]), 4)
+                extra_metrics[f"trailer{i_t}/wheel_torque_l_Nm"] = round(float(data.actuator(f"m_t{i_t}_l").force.item()), 2)
+                extra_metrics[f"trailer{i_t}/wheel_torque_r_Nm"] = round(float(data.actuator(f"m_t{i_t}_r").force.item()), 2)
             bar_meas_raw = [(r_max, f_max)] * cfg.num_joints    # unrounded, for the geometry below
             for j_idx in range(cfg.num_joints):
                 r_jnt = f"slide_rear_{j_idx + 1}"

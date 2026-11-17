@@ -1,0 +1,9 @@
+# Each cart's CG is ~0.04 m above the chassis centre; the default axle is 0.14 m BELOW it, so a cart is an
+# inverted pendulum. Bigger wheels let the axle sit ABOVE the CG without the chassis touching the ground:
+# body height = radius - offset = 0.17 m, chassis bottom 0.05 m off the ground, CG ~0.04 m below the axle.
+[test]
+TestName = "Wheels 0.25 m, axle +0.08 (CG below axle)"
+
+[geometry]
+wheel_radius_m = 0.25
+wheel_z_offset_m = 0.08

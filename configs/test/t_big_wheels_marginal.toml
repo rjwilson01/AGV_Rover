@@ -1,0 +1,7 @@
+# Axle just at the CG height (neutral pitch stability): body height 0.21 m.
+[test]
+TestName = "Wheels 0.25 m, axle +0.04 (axle at CG)"
+
+[geometry]
+wheel_radius_m = 0.25
+wheel_z_offset_m = 0.04

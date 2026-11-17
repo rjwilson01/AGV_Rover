@@ -1,5 +1,8 @@
-from pathlib import Path
+import argparse
+import json
 import sys
+from contextlib import nullcontext
+from pathlib import Path
 import time
 import numpy as np
 import mujoco
@@ -7,9 +10,10 @@ import mujoco.viewer
 
 from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
-from config import load_config
+from config import config_diff, load_config
 from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
+from test_sequence import DEFAULT_DURATION_S, Segment, parse_sequence
 from viewer_overlay import render_bar_yaw_overlay, render_path_overlay
 from xml_builder import generate_mujoco_xml
 
@@ -22,12 +26,105 @@ CORNER_SIGNS = (
 STOP_WHEEL_VEL_EPS = 1e-6
 
 
+class _NullViewer:
+    """Stand-in used with --no-viewer so the loop runs headless (and as fast as the CPU allows)."""
+
+    def is_running(self):
+        return True
+
+    def close(self):
+        pass
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Snake AGV simulation")
+    parser.add_argument("preset", nargs="?", default=None, help="controller preset, e.g. VariableDrawbarController")
+    parser.add_argument(
+        "--tests", default=None, metavar="SPEC",
+        help="test sequence, e.g. 200-a,b,c,100-d,e,100+f,g  (seconds, then - = reset to defaults / + = keep "
+             "previous files, then files in configs/test/; each group runs once its files are loaded)",
+    )
+    parser.add_argument(
+        "--set", action="append", default=[], metavar="SECTION.KEY=VALUE",
+        help="override one config value (TOML syntax); beats every test file. Repeatable.",
+    )
+    parser.add_argument("--no-viewer", action="store_true", help="run headless, faster than real time")
+    # argparse treats a value starting with '-' (e.g. "--tests -200-a,b") as a new option: glue it on as --tests=VALUE
+    argv = sys.argv[1:]
+    for i, tok in enumerate(argv[:-1]):
+        if tok == "--tests" and argv[i + 1].startswith("-"):
+            argv[i:i + 2] = [f"--tests={argv[i + 1]}"]
+            break
+    args = parser.parse_args(argv)
+
     base_dir = Path(__file__).resolve().parent
-    preset_arg = sys.argv[1] if len(sys.argv) > 1 else None
 
-    cfg = load_config(preset_arg)
+    # ---- plan every segment up front so a typo in any test file fails before anything runs
+    if args.tests:
+        segments = parse_sequence(args.tests)
+    else:
+        segments = [Segment(True, None, (), ())]
+    plans = []
+    for seg in segments:
+        cfg = load_config(args.preset, test_files=seg.active_files, set_overrides=args.set)
+        if args.tests:
+            duration = seg.duration_s or cfg.test_duration_s or DEFAULT_DURATION_S
+        elif args.no_viewer:
+            duration = DEFAULT_DURATION_S                     # headless has no window to close
+        else:
+            duration = None                                   # interactive: run until the viewer is closed
+        changes = config_diff(args.preset, test_files=seg.active_files, set_overrides=args.set)
+        plans.append((seg, cfg, duration, changes))
 
+    first_cfg = plans[0][1]
+    meta = {"controller": first_cfg.controller_class}
+    if args.tests:
+        meta["TestName"] = "; ".join(p[1].test_name or "(defaults)" for p in plans)
+        meta["test_sequence"] = args.tests
+        for i, (seg, cfg, duration, changes) in enumerate(plans, start=1):
+            meta[f"segment_{i}"] = (
+                f"TestName={cfg.test_name or '(defaults)'} | {'reset' if seg.reset else 'add'} | "
+                f"duration_s={duration:g} | files={','.join(seg.active_files) or '-'} | "
+                f"changes={json.dumps(changes, default=str)}"
+            )
+    elif args.set:
+        meta["set"] = " ".join(args.set)
+    meta.update({
+        "drawbar_mode": first_cfg.drawbar_mode,
+        "bar_yaw_control": first_cfg.bar_yaw_control,
+        "num_trailers": first_cfg.num_trailers,
+        "ir_noise_std_deg": first_cfg.ir_noise_std_deg,
+        "ir_latency_s": first_cfg.ir_latency_s,
+        "use_ir_camera_feedback": first_cfg.use_ir_camera_feedback,
+        "bar_yaw_kp": first_cfg.bar_yaw_kp,
+        "bar_yaw_kv": first_cfg.bar_yaw_kv,
+    })
+
+    telemetry = TelemetryManager(
+        base_dir,
+        udp_host=first_cfg.udp_host,
+        udp_port=first_cfg.udp_port,
+        enable_csv=first_cfg.save_csv_log,
+        bar_yaw=first_cfg.bar_yaw_control,
+        meta=meta,
+    )
+    try:
+        for i, (seg, cfg, duration, changes) in enumerate(plans, start=1):
+            if args.tests:
+                print(f"[Test {i}/{len(plans)}] {cfg.test_name or '(defaults)'} | {duration:g} s | "
+                      f"files={','.join(seg.active_files) or '-'}")
+                telemetry.set_segment(i, cfg.test_name or "(defaults)")
+            finished = run_sim(cfg, telemetry, duration, show_viewer=not args.no_viewer)
+            telemetry.flush_csv()
+            if not finished:
+                print("[Test] viewer closed - stopping the sequence")
+                break
+    finally:
+        telemetry.close()
+
+
+def run_sim(cfg, telemetry, duration_s=None, show_viewer=True) -> bool:
+    """Run one simulation. Returns True if it ran to duration_s, False if the viewer was closed first."""
     print(f"[Sim] Loaded controller={cfg.controller_class} | mode={cfg.drawbar_mode} | path={cfg.active_path}")
 
     xml_str = generate_mujoco_xml(cfg)
@@ -37,24 +134,6 @@ def main():
     lead_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trailer_1")
     controller = create_controller(cfg)
     ir_camera = IRCameraModel(cfg)
-    telemetry = TelemetryManager(
-        base_dir,
-        udp_host=cfg.udp_host,
-        udp_port=cfg.udp_port,
-        enable_csv=cfg.save_csv_log,
-        bar_yaw=cfg.bar_yaw_control,
-        meta={
-            "controller": cfg.controller_class,
-            "drawbar_mode": cfg.drawbar_mode,
-            "bar_yaw_control": cfg.bar_yaw_control,
-            "num_trailers": cfg.num_trailers,
-            "ir_noise_std_deg": cfg.ir_noise_std_deg,
-            "ir_latency_s": cfg.ir_latency_s,
-            "use_ir_camera_feedback": cfg.use_ir_camera_feedback,
-            "bar_yaw_kp": cfg.bar_yaw_kp,
-            "bar_yaw_kv": cfg.bar_yaw_kv,
-        },
-    )
 
     wheel_names = [
         f"m_t{i}_{side}"
@@ -85,14 +164,19 @@ def main():
     prev_sim_time = 0.0
     post_stop_time = 0.0
 
-    with mujoco.viewer.launch_passive(model, data) as viewer:
-        viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
-        viewer.cam.trackbodyid = lead_body_id
-        viewer.cam.distance = cfg.camera_distance_m
-        viewer.cam.azimuth = cfg.camera_azimuth_deg
-        viewer.cam.elevation = cfg.camera_elevation_deg
+    finished = False
+    with (mujoco.viewer.launch_passive(model, data) if show_viewer else nullcontext(_NullViewer())) as viewer:
+        if show_viewer:
+            viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            viewer.cam.trackbodyid = lead_body_id
+            viewer.cam.distance = cfg.camera_distance_m
+            viewer.cam.azimuth = cfg.camera_azimuth_deg
+            viewer.cam.elevation = cfg.camera_elevation_deg
 
         while viewer.is_running():
+            if duration_s is not None and data.time >= duration_s:
+                finished = True
+                break
             if data.time < prev_sim_time:
                 post_stop_time = 0.0
                 controller.reset()
@@ -172,11 +256,12 @@ def main():
 
             mujoco.mj_step(model, data)
 
-            with viewer.lock():
-                render_path_overlay(viewer, cfg.waypoints, controller.last_lookahead)
-                if bars:
-                    render_bar_yaw_overlay(viewer, data, cfg, controller.last_bar_yaws, controller.last_bar_lengths)
-            viewer.sync()
+            if show_viewer:
+                with viewer.lock():
+                    render_path_overlay(viewer, cfg.waypoints, controller.last_lookahead)
+                    if bars:
+                        render_bar_yaw_overlay(viewer, data, cfg, controller.last_bar_yaws, controller.last_bar_lengths)
+                viewer.sync()
 
             forces = {
                 t_name: abs(float(data.actuator(c_name).force.item()))
@@ -263,11 +348,12 @@ def main():
                 )
 
 
-            elapsed = time.time() - step_start
-            if elapsed < model.opt.timestep:
-                time.sleep(model.opt.timestep - elapsed)
+            if show_viewer:
+                elapsed = time.time() - step_start
+                if elapsed < model.opt.timestep:
+                    time.sleep(model.opt.timestep - elapsed)
 
-    telemetry.close()
+    return finished
 
 
 if __name__ == "__main__":

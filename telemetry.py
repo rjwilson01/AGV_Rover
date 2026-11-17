@@ -30,10 +30,17 @@ class TelemetryManager:
         self.csv_path = base_dir / "sim_log.csv"   # same file every run: just overwrite it, then git push
         self.csv_rows = []
         self.last_stream = 0.0
+        self.segment_idx = 0
+        self.segment_name = ""
         print(f"[Telemetry] UDP target: {self.addr[0]}:{self.addr[1]} | CSV enabled: {self.enable_csv}")
         self.pj_proc = (
             launch_plotjuggler(base_dir, udp_port=udp_port, num_joints=2, bar_yaw=bar_yaw) if launch_pj else None
         )
+
+    def set_segment(self, idx: int, name: str) -> None:
+        """Tag following rows with the test segment they belong to (1-based; 0 = not a test run)."""
+        self.segment_idx, self.segment_name = idx, name
+        self.last_stream = -1.0
 
     def update(
         self,
@@ -61,6 +68,7 @@ class TelemetryManager:
             "pose/y_m": round(float(pos_xy[1]), 3),
             "pose/hdg_deg": round(float(np.rad2deg(lead_hdg)), 3),
             "tension/peak_N": round(float(max(forces.values())) if forces else 0.0, 2),
+            "test/segment": self.segment_idx,
         }
         if extra_metrics:
             row.update(extra_metrics)
@@ -118,7 +126,19 @@ class TelemetryManager:
             self._printed_first_pkt = True
         
         if self.enable_csv:
-            self.csv_rows.append(row)
+            self.csv_rows.append({**row, "test/name": self.segment_name} if self.segment_idx else row)
+
+    def flush_csv(self) -> None:
+        """(Re)write the CSV with everything logged so far, so a crash mid-sequence loses nothing."""
+        if not (self.enable_csv and self.csv_rows):
+            return
+        fields = list(dict.fromkeys(k for r in self.csv_rows for k in r))
+        with open(self.csv_path, "w", newline="") as f:
+            for k, v in self.meta.items():
+                f.write(f"# {k}: {v}\n")   # read with pandas.read_csv(path, comment="#")
+            writer = csv.DictWriter(f, fieldnames=fields, restval="")
+            writer.writeheader()
+            writer.writerows(self.csv_rows)
 
     def close(self):
         self.sock.close()
@@ -126,11 +146,5 @@ class TelemetryManager:
             print(f"[Telemetry] Terminate PJ")
             self.pj_proc.terminate()
         if self.enable_csv and self.csv_rows:
-            fields = list(dict.fromkeys(k for r in self.csv_rows for k in r))
-            with open(self.csv_path, "w", newline="") as f:
-                for k, v in self.meta.items():
-                    f.write(f"# {k}: {v}\n")   # read with pandas.read_csv(path, comment="#")
-                writer = csv.DictWriter(f, fieldnames=fields, restval="")
-                writer.writeheader()
-                writer.writerows(self.csv_rows)
+            self.flush_csv()
             print(f"Saved {len(self.csv_rows)} samples to {self.csv_path}")

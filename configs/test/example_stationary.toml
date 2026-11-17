@@ -1,0 +1,10 @@
+# Example test file: any section/key from common.toml or the controller toml can be overridden here.
+# [test] is special: TestName is written to the CSV header; duration_s is how long to run
+# (an explicit seconds value in --tests, e.g. 200-example_stationary, takes precedence).
+[test]
+TestName = "Stationary, level cables"
+duration_s = 10.0
+
+[controller]
+v_center_mps = 0.0
+use_ir_camera_feedback = false

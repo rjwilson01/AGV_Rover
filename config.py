@@ -100,6 +100,10 @@ class AGVConfig:
     bar_yaw_damping: float = 2.0                # passive hinge damping
     bar_yaw_hinge_margin_deg: float = 5.0       # hinge stop sits this far beyond the commanded range
 
+    # --- Test sequence info (set by load_config when test files are applied) ---
+    test_name: str = ""
+    test_duration_s: float | None = None
+
     # --- Derived Properties ---
     @property
     def num_joints(self) -> int:
@@ -120,10 +124,41 @@ class AGVConfig:
         return 2.0 * self.wheel_y_offset_m
 
 
-def load_config(
+TEST_DIR = Path("configs") / "test"
+
+
+def resolve_test_path(name: str) -> Path:
+    """A bare name means configs/test/<name>.toml; anything with a folder or a .toml suffix is used as given."""
+    base_dir = Path(__file__).resolve().parent
+    p = Path(name)
+    if not p.suffix:
+        p = p.with_suffix(".toml")
+    if len(p.parts) == 1:
+        p = TEST_DIR / p
+    return p if p.is_absolute() else base_dir / p
+
+
+def _parse_set(item: str) -> tuple[list[str], object]:
+    """'section.key=value' -> (['section','key'], parsed value). Value is TOML (1.05, true, [1,2], "x")."""
+    if "=" not in item:
+        raise ValueError(f"--set needs section.key=value, got {item!r}")
+    key, val = item.split("=", 1)
+    try:
+        parsed = tomllib.loads(f"v = {val.strip()}")["v"]
+    except tomllib.TOMLDecodeError:
+        parsed = val.strip()
+    return key.strip().split("."), parsed
+
+
+def read_raw_config(
     impl_toml_path: Path | str | None = None,
     common_toml_path: Path | str | None = None,
-) -> AGVConfig:
+    test_files=(),
+    set_overrides=(),
+) -> tuple[dict, list[dict]]:
+    """Merged raw config: common < controller < each test file in order < --set overrides.
+
+    Returns (raw, test_infos) where test_infos is one {file, TestName, duration_s} per test file."""
     base_dir = Path(__file__).resolve().parent
 
     common_path = Path(common_toml_path) if common_toml_path else base_dir / "configs" / "common.toml"
@@ -145,6 +180,59 @@ def load_config(
         impl_raw = tomllib.load(f)
 
     raw = _deep_merge(common_raw, impl_raw)
+
+    infos = []
+    for name in test_files:
+        tpath = resolve_test_path(name)
+        if not tpath.exists():
+            raise FileNotFoundError(f"test file not found: {tpath} (from {name!r})")
+        with open(tpath, "rb") as f:
+            t_raw = tomllib.load(f)
+        meta = t_raw.pop("test", {})      # [test] holds TestName / duration_s, not simulation parameters
+        infos.append({
+            "file": Path(name).stem,
+            "TestName": str(meta.get("TestName", Path(name).stem)),
+            "duration_s": float(meta["duration_s"]) if "duration_s" in meta else None,
+        })
+        raw = _deep_merge(raw, t_raw)
+
+    for item in set_overrides:
+        path, val = _parse_set(item)
+        node = raw
+        for k in path[:-1]:
+            node = node.setdefault(k, {})
+        node[path[-1]] = val
+    return raw, infos
+
+
+def _flatten(d: dict, prefix: str = "") -> dict:
+    out = {}
+    for k, v in d.items():
+        key = f"{prefix}{k}"
+        if isinstance(v, dict):
+            out.update(_flatten(v, key + "."))
+        else:
+            out[key] = v
+    return out
+
+
+def config_diff(impl_toml_path=None, common_toml_path=None, test_files=(), set_overrides=()) -> dict:
+    """Flat {'section.key': value} of everything that differs from the plain controller + common defaults."""
+    base, _ = read_raw_config(impl_toml_path, common_toml_path)
+    cur, _ = read_raw_config(impl_toml_path, common_toml_path, test_files, set_overrides)
+    fb, fc = _flatten(base), _flatten(cur)
+    return {k: v for k, v in fc.items() if fb.get(k, object()) != v}
+
+
+def load_config(
+    impl_toml_path: Path | str | None = None,
+    common_toml_path: Path | str | None = None,
+    test_files=(),
+    set_overrides=(),
+) -> AGVConfig:
+    raw, infos = read_raw_config(impl_toml_path, common_toml_path, test_files, set_overrides)
+    test_name = " + ".join(i["TestName"] for i in infos)
+    test_duration = next((i["duration_s"] for i in reversed(infos) if i["duration_s"] is not None), None)
 
     d = raw["drawbar"]
     g = raw["geometry"]
@@ -233,4 +321,6 @@ def load_config(
         bar_yaw_max_torque_nm=float(bars.get("yaw_max_torque_nm", 200.0)),
         bar_yaw_damping=float(bars.get("yaw_damping", 2.0)),
         bar_yaw_hinge_margin_deg=float(bars.get("yaw_hinge_margin_deg", 5.0)),
+        test_name=test_name,
+        test_duration_s=test_duration,
     )

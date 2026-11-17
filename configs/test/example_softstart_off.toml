@@ -1,0 +1,5 @@
+[test]
+TestName = "Hard launch (no soft start)"
+
+[controller]
+start_ramp_s = 0.0

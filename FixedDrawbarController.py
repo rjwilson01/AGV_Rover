@@ -44,6 +44,9 @@ class FixedDrawbarController(BaseSnakeController):
 
         wheel_vels = []
         eff_len = 0.5 * seg_pitch
+        if self.cfg.wheel_speed_from_ir and ir_readings is not None:
+            wheel_vels = self._ir_wheel_vels(v_cmd, kappa, self.last_bar_lengths)
+            axle_yaws = []
         for psi in axle_yaws:
             if abs(psi) < STRAIGHT_LINE_YAW_EPS:
                 wl = wr = v_cmd / self.cfg.wheel_radius_m

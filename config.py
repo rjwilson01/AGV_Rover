@@ -100,6 +100,10 @@ class AGVConfig:
     bar_yaw_damping: float = 2.0                # passive hinge damping
     bar_yaw_hinge_margin_deg: float = 5.0       # hinge stop sits this far beyond the commanded range
 
+    # Follower wheel speeds from the MEASURED joint yaw (IR camera) via the hitch kinematics, not the commanded yaw
+    wheel_speed_from_ir: bool = False
+    joint_yaw_sign: float = 1.0                 # -1 flips controller yaws to physical hinge/ball commands
+
     # --- Mass layout (defaults reproduce the original model: all dry mass at the chassis centre) ---
     battery_mass_kg: float = 0.0                 # part of the dry mass, placed as its own block
     battery_z_m: float | None = None             # height vs chassis centre; None = axle height
@@ -327,6 +331,8 @@ def load_config(
         bar_yaw_max_torque_nm=float(bars.get("yaw_max_torque_nm", 200.0)),
         bar_yaw_damping=float(bars.get("yaw_damping", 2.0)),
         bar_yaw_hinge_margin_deg=float(bars.get("yaw_hinge_margin_deg", 5.0)),
+        joint_yaw_sign=float(raw["controller"].get("joint_yaw_sign", 1.0)),
+        wheel_speed_from_ir=bool(raw["controller"].get("wheel_speed_from_ir", False)),
         battery_mass_kg=float(raw.get("mass_layout", {}).get("battery_mass_kg", 0.0)),
         battery_z_m=raw.get("mass_layout", {}).get("battery_z_m"),
         water_rigid_z_m=float(raw.get("mass_layout", {}).get("water_rigid_z_m", 0.06)),

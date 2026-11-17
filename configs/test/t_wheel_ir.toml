@@ -1,0 +1,7 @@
+# Follower wheel speeds from the MEASURED joint yaw (IR camera) via the hitch kinematics,
+# instead of from the commanded yaw. Lead follows the pure-pursuit curvature.
+[test]
+TestName = "Wheel speeds from IR yaw"
+
+[controller]
+wheel_speed_from_ir = true

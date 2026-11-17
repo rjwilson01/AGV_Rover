@@ -1,0 +1,8 @@
+# Flip the sign of the commanded hinge/ball yaw. The planar kinematics say a follower's yaw relative to its
+# leader is NEGATIVE in a left turn, but the controller yaw is positive for a left turn and was sent to the
+# hinges unchanged, bending the hitch the wrong way.
+[test]
+TestName = "Yaw command sign flipped"
+
+[controller]
+joint_yaw_sign = -1.0

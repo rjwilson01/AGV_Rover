@@ -222,6 +222,12 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             ir_readings = ir_camera.measure(t, trailer_quats)
 
             wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
+            # Controller yaws are positive for a left turn. The physical yaw of a follower relative to its leader is
+            # NEGATIVE in a left turn, so joint_yaw_sign = -1 maps controller yaws to physical hinge/ball commands.
+            # Everything downstream (actuators, overlay, telemetry cmd-vs-meas) works in physical yaw.
+            sgn = cfg.joint_yaw_sign
+            joint_yaws = [sgn * y for y in joint_yaws]
+            bar_yaws = [(sgn * a_, sgn * b_) for a_, b_ in controller.last_bar_yaws]
             ramp = min(1.0, t / cfg.start_ramp_s) if cfg.start_ramp_s > 0.0 else 1.0
             for w_name, w_vel in zip(wheel_names, wheel_vels):
                 data.actuator(w_name).ctrl = w_vel * ramp
@@ -246,7 +252,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
 
                 ir = ir_readings[j_idx]
                 if bars:
-                    psi_r, psi_f = controller.last_bar_yaws[j_idx]
+                    psi_r, psi_f = bar_yaws[j_idx]
                     y_ball_cmd = y_cmd - psi_r - psi_f          # what the tubes cannot take goes to the ball
                     # Hold the ball's current pitch/roll: IR trailer R/P/Y minus the measured tube angles
                     if cfg.use_ir_camera_feedback:
@@ -284,7 +290,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 with viewer.lock():
                     render_path_overlay(viewer, cfg.waypoints, controller.last_lookahead)
                     if bars:
-                        render_bar_yaw_overlay(viewer, data, cfg, controller.last_bar_yaws, controller.last_bar_lengths)
+                        render_bar_yaw_overlay(viewer, data, cfg, bar_yaws, controller.last_bar_lengths)
                 viewer.sync()
 
             forces = {
@@ -325,7 +331,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 # axle distance implied by the measured geometry (compared with the real one in telemetry)
                 for j_idx in range(cfg.num_joints):
                     n = j_idx + 1
-                    psi_r_cmd, psi_f_cmd = controller.last_bar_yaws[j_idx]
+                    psi_r_cmd, psi_f_cmd = bar_yaws[j_idx]
                     psi_r_meas = float(data.joint(f"yaw_rear_{n}").qpos.item())
                     psi_f_meas = float(data.joint(f"yaw_front_{n + 1}").qpos.item())
                     b_yaw, b_pitch, b_roll = quat_to_euler(data.joint(f"ball_joint_{n}").qpos)

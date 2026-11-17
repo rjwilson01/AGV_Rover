@@ -74,7 +74,10 @@ class VariableDrawbarController(BaseSnakeController):
             cum_dist_m += (r_cmd + f_cmd)
 
         wheel_vels = []
-        for i in range(self.num_trailers):
+        use_ir_wheels = self.cfg.wheel_speed_from_ir and ir_readings is not None
+        if use_ir_wheels:
+            wheel_vels = self._ir_wheel_vels(v_cmd, kappa, bar_lengths)
+        for i in range(0 if use_ir_wheels else self.num_trailers):
             if i == 0:
                 psi = joint_yaws[0]
                 eff_len = bar_lengths[0][0]
@@ -99,7 +102,7 @@ class VariableDrawbarController(BaseSnakeController):
         return wheel_vels, joint_yaws, bar_lengths
     
     def get_telemetry(self) -> dict[str, float]:
-        metrics: dict[str, float] = {}
+        metrics: dict[str, float] = super().get_telemetry()
         for idx, (r_cmd, f_cmd) in enumerate(self.last_bar_lengths, start=1):
             metrics[f"joint{idx}/rear_bar_cmd_m"] = round(float(r_cmd), 4)
             metrics[f"joint{idx}/front_bar_cmd_m"] = round(float(f_cmd), 4)

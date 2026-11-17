@@ -77,6 +77,7 @@ class BaseSnakeController(ABC):
         self.last_lookahead = None
         self.last_joint_yaws = [0.0] * self.num_joints
         self.last_ir_readings = [(0.0, 0.0, 0.0)] * self.num_joints
+        self.last_follow_states = []
         # Commanded tube yaw per hitch: (rear bar of trailer j, front bar of trailer j+1), radians.
         # Their sum plus the ball yaw equals the commanded trailer-to-trailer yaw in last_joint_yaws.
         self.last_bar_yaws = [(0.0, 0.0)] * self.num_joints
@@ -150,6 +151,36 @@ class BaseSnakeController(ABC):
         """
         ...
 
+    def _ir_wheel_vels(self, v_cmd: float, kappa: float, bar_lengths) -> list[float]:
+        """Wheel speeds for every trailer from the hitch kinematics and the MEASURED joint yaws.
+
+        Planar model: trailer j has speed v_j and yaw rate w_j; its rear hitch point is L_r behind its axle, and the
+        next trailer's front hitch point is L_f ahead of its axle. With psi = measured yaw of trailer j+1 relative to j
+        (the IR camera yaw), matching the hitch point's velocity on both sides gives
+            v_{j+1} = v_j cos(psi) - w_j L_r sin(psi)
+            w_{j+1} = -(v_j sin(psi) + w_j L_r cos(psi)) / L_f
+        The lead trailer follows the pure-pursuit curvature: w_0 = v_cmd * kappa. Left wheel is faster in a left turn.
+        """
+        v, w = float(v_cmd), float(v_cmd) * float(kappa)
+        states = [(v, w)]
+        w_lim = 3.0
+        for j in range(self.num_joints):
+            psi = self.last_ir_readings[j][0]
+            l_r, l_f = bar_lengths[j]
+            s, c = np.sin(psi), np.cos(psi)
+            v_next = v * c - w * l_r * s
+            w_next = -(v * s + w * l_r * c) / max(l_f, NUMERIC_EPS)
+            v = float(np.clip(v_next, 0.0, 2.0 * abs(v_cmd)))
+            w = float(np.clip(w_next, -w_lim, w_lim))
+            states.append((v, w))
+        self.last_follow_states = states
+        half_track = 0.5 * self.cfg.track_width_m
+        wheel_vels: list[float] = []
+        for v_i, w_i in states:
+            wheel_vels.extend([(v_i + w_i * half_track) / self.cfg.wheel_radius_m,
+                               (v_i - w_i * half_track) / self.cfg.wheel_radius_m])
+        return wheel_vels
+
     def _store_ir(self, ir_readings: Sequence[tuple[float, float, float]] | None) -> None:
         """Keep the latest IR camera readings so control laws can use them."""
         if ir_readings is not None:
@@ -157,7 +188,11 @@ class BaseSnakeController(ABC):
 
     def get_telemetry(self) -> dict[str, float]:
         """Return controller-specific telemetry channels for PlotJuggler/CSV."""
-        return {}
+        metrics: dict[str, float] = {}
+        for idx, (v_i, w_i) in enumerate(self.last_follow_states, start=1):
+            metrics[f"trailer{idx}/v_cmd_mps"] = round(float(v_i), 4)
+            metrics[f"trailer{idx}/omega_cmd_rad_s"] = round(float(w_i), 4)
+        return metrics
 
 
 def create_controller(cfg: AGVConfig) -> BaseSnakeController:

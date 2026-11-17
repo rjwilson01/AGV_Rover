@@ -5,3 +5,4 @@ pj_auto_layout.xml
 sim_log_*.csv
 ClaudeInstrutions.txt
 plotjuggler.log
+MUJOCO_LOG.TXT

@@ -12,6 +12,7 @@ from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import cg_above_axle_m, config_diff, load_config
 from imu import IMUModel
+from safeguard import FollowerGuard
 from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
 from test_sequence import DEFAULT_DURATION_S, Segment, parse_sequence
@@ -156,6 +157,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
     controller = create_controller(cfg)
     ir_camera = IRCameraModel(cfg)
     imu_model = IMUModel(cfg) if cfg.imu_enabled else None
+    guard = FollowerGuard(cfg)
 
     wheel_names = [
         f"m_t{i}_{side}"
@@ -209,6 +211,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 ir_camera.reset()
                 if imu_model is not None:
                     imu_model.reset()
+                guard.reset()
                 apply_neutral_controls()
             prev_sim_time = data.time
 
@@ -240,8 +243,12 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             joint_yaws = [sgn * y for y in joint_yaws]
             bar_yaws = [(sgn * a_, sgn * b_) for a_, b_ in controller.last_bar_yaws]
             ramp = min(1.0, t / cfg.start_ramp_s) if cfg.start_ramp_s > 0.0 else 1.0
-            for w_name, w_vel in zip(wheel_names, wheel_vels):
-                data.actuator(w_name).ctrl = w_vel * ramp
+            # Stall guard: lead commanded vs actual speed (stand-in for lead odometry / GNSS speed)
+            v_lead_cmd = abs(0.5 * (wheel_vels[0] + wheel_vels[1])) * cfg.wheel_radius_m * ramp
+            v_lead_meas = float(np.hypot(*data.joint("root_jnt").qvel[:2]))
+            guard_scale = guard.update(t, v_lead_cmd, v_lead_meas)
+            for k, (w_name, w_vel) in enumerate(zip(wheel_names, wheel_vels)):
+                data.actuator(w_name).ctrl = w_vel * ramp * (1.0 if k < 2 else guard_scale)
 
             if bars:
                 # With yaw tubes the ball joint is only part of the hitch: use the true trailer-to-trailer R/P/Y.
@@ -316,6 +323,9 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 post_stop_time = 0.0
 
             extra_metrics = controller.get_telemetry()
+            extra_metrics["guard/follower_scale"] = round(guard_scale, 3)
+            extra_metrics["guard/lead_speed_cmd_mps"] = round(v_lead_cmd, 3)
+            extra_metrics["guard/lead_speed_meas_mps"] = round(v_lead_meas, 3)
             # Absolute attitude, height and wheel torque of each trailer (diagnoses cart rocking / drive reaction)
             for i_t, q_t in enumerate(trailer_quats, start=1):
                 _, p_abs, r_abs = quat_to_euler(q_t)

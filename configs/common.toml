@@ -40,6 +40,12 @@ capstan_max_pull_n = 6000.0
 [controller]
 active_path = "paddock_turn"
 goal_tol_m = 0.25
+guard_enabled = true               # Followers stop if the lead is commanded to move but isn't (blocked/collided)
+guard_stall_ratio = 0.3            # stalled when measured lead speed < this x commanded ...
+guard_stall_time_s = 0.5           # ... for this long
+guard_release_ratio = 0.6          # resume when lead speed recovers above this x commanded
+guard_min_cmd_mps = 0.15
+guard_ramp_s = 0.5                 # follower speed ramps to/from zero over this long
 start_ramp_s = 2.0                  # Wheel speed ramps 0 -> full over this long (0 = step). Avoids a launch torque kick.
 use_ir_camera_feedback = false
 cross_track_gain = 0.55             # Pulls trailing axles onto the path (rad per meter of lateral error)

@@ -104,6 +104,14 @@ class AGVConfig:
     wheel_speed_from_ir: bool = False
     joint_yaw_sign: float = 1.0                 # -1 flips controller yaws to physical hinge/ball commands
 
+    # --- Follower stall guard ---
+    guard_enabled: bool = True
+    guard_stall_ratio: float = 0.3
+    guard_release_ratio: float = 0.6
+    guard_stall_time_s: float = 0.5
+    guard_min_cmd_mps: float = 0.15
+    guard_ramp_s: float = 0.5
+
     # --- IMU per trailer (defaults = Bosch BMI088 datasheet) ---
     imu_enabled: bool = True
     imu_rate_hz: float = 400.0
@@ -319,6 +327,12 @@ def load_config(
         active_path=active_name,
         v_center_mps=float(c["v_center_mps"]),
         start_ramp_s=float(c.get("start_ramp_s", 0.0)),
+        guard_enabled=bool(c.get("guard_enabled", True)),
+        guard_stall_ratio=float(c.get("guard_stall_ratio", 0.3)),
+        guard_release_ratio=float(c.get("guard_release_ratio", 0.6)),
+        guard_stall_time_s=float(c.get("guard_stall_time_s", 0.5)),
+        guard_min_cmd_mps=float(c.get("guard_min_cmd_mps", 0.15)),
+        guard_ramp_s=float(c.get("guard_ramp_s", 0.5)),
         lookahead_dist_m=float(c["lookahead_dist_m"]),
         goal_tol_m=float(c["goal_tol_m"]),
         max_curvature=float(c["max_curvature"]),

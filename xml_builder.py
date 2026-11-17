@@ -9,16 +9,28 @@ SITE_CORNERS = (
 )
 
 
+def _battery_xml(idx: int, cfg: AGVConfig, indent: str) -> str:
+    """Battery pack as its own (non-colliding) mass block, so its height is part of the cart's CG."""
+    if cfg.battery_mass_kg <= 0.0:
+        return ""
+    z = cfg.battery_z_m if cfg.battery_z_m is not None else cfg.wheel_z_offset_m
+    return (
+        f'{indent}<geom name="t{idx}_battery" type="box" pos="0 0 {z:.3f}" '
+        f'size="{cfg.chassis_half_len_m * 0.6:.3f} {cfg.chassis_half_width_m * 0.8:.3f} 0.04" '
+        f'mass="{cfg.battery_mass_kg:.1f}" rgba="0.9 0.8 0.1 0.5" contype="0" conaffinity="0"/>\n'
+    )
+
+
 def _build_slosh_tank_xml(idx: int, cfg: AGVConfig, indent: str) -> str:
     if cfg.water_liters_per_trailer <= 0.0:
         return ""
     total_water_kg = cfg.water_liters_per_trailer
     m_slosh = total_water_kg * cfg.slosh_mass_fraction
     m_rigid = total_water_kg - m_slosh
-    pivot_z = cfg.chassis_half_height_m + cfg.slosh_pendulum_len_m
+    pivot_z = cfg.slosh_pivot_z_m if cfg.slosh_pivot_z_m is not None else cfg.chassis_half_height_m + cfg.slosh_pendulum_len_m
 
     return (
-        f'{indent}<geom name="t{idx}_water_rigid" type="box" pos="0 0 0.06" '
+        f'{indent}<geom name="t{idx}_water_rigid" type="box" pos="0 0 {cfg.water_rigid_z_m:g}" '
         f'size="{cfg.chassis_half_len_m * 0.75:.3f} {cfg.chassis_half_width_m * 0.80:.3f} 0.05" '
         f'mass="{m_rigid:.1f}" rgba="0.1 0.5 0.9 0.35" contype="0" conaffinity="0"/>\n'
         f'{indent}<body name="t{idx}_slosh_pivot" pos="0 0 {pivot_z:.3f}">\n'
@@ -100,8 +112,11 @@ def _build_trailer_body(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
 
     lines.append(
         f'{b_ind}\t<geom name="t{idx}_chassis" type="box" '
-        f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass:.1f}" material="{mat}"/>'
+        f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass - cfg.battery_mass_kg:.1f}" material="{mat}"/>'
     )
+    batt_xml = _battery_xml(idx, cfg, b_ind + "\t")
+    if batt_xml:
+        lines.append(batt_xml.rstrip("\n"))
     slosh_xml = _build_slosh_tank_xml(idx, cfg, b_ind + "\t")
     if slosh_xml:
         lines.append(slosh_xml)
@@ -220,7 +235,10 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
     mass = cfg.lead_dry_mass_kg if is_lead else cfg.trailer_dry_mass_kg
     mat = "chassis_lead" if is_lead else "chassis_trl"
     add(lv, f'<geom name="t{idx}_chassis" type="box" '
-            f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass:.1f}" material="{mat}"/>')
+            f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass - cfg.battery_mass_kg:.1f}" material="{mat}"/>')
+    batt_xml = _battery_xml(idx, cfg, "\t" * (depth + lv))
+    if batt_xml:
+        out.append(batt_xml.rstrip("\n"))
     slosh_xml = _build_slosh_tank_xml(idx, cfg, "\t" * (depth + lv))
     if slosh_xml:
         out.append(slosh_xml)

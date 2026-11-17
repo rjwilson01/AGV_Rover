@@ -1,0 +1,7 @@
+# Wheels 0.35 m, axle 0.03 m ABOVE the chassis centre: body height 0.32 m, chassis clearance 0.20 m (= original).
+[test]
+TestName = "Wheels 0.35 m, axle +0.03 (clearance 0.20)"
+
+[geometry]
+wheel_radius_m = 0.35
+wheel_z_offset_m = 0.03

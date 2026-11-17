@@ -1,0 +1,7 @@
+# Batteries mounted low on the chassis floor (-0.10 m) instead of following the axle height.
+# Lets the axle stay higher without raising the CG. Use together with t_real_layout and a wheel file.
+[test]
+TestName = "Batteries on the chassis floor (-0.10)"
+
+[mass_layout]
+battery_z_m = -0.10

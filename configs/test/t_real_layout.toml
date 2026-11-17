@@ -1,0 +1,22 @@
+# Real mass layout, per cart: 110 kg dry INCLUDING a ~65 kg battery (10 kWh Li, 54 V) in a layer at axle height;
+# 100 L of water spread over the full chassis footprint, so its centre is about the chassis centre.
+# Water is nearly a full tank, so only 30% is modelled as slosh, hanging from a pivot at +0.12 m (bob at the centre).
+[test]
+TestName = "Real mass layout (batt at axle, water mid)"
+
+[geometry]
+trailer_dry_mass_kg = 110.0
+
+[mass_layout]
+battery_mass_kg = 65.0
+water_rigid_z_m = 0.0
+slosh_pivot_z_m = 0.12
+
+[tank_slosh]
+water_liters_per_trailer = 100.0
+slosh_mass_fraction = 0.3
+slosh_pendulum_len_m = 0.12
+# stiffness/damping scaled with the smaller slosh mass (30 kg vs 72 kg) so the pendulum stays well-conditioned
+slosh_roll_stiffness = 27.0
+slosh_pitch_stiffness = 15.0
+slosh_damping = 7.5

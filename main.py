@@ -10,7 +10,7 @@ import mujoco.viewer
 
 from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
-from config import config_diff, load_config
+from config import cg_above_axle_m, config_diff, load_config
 from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
 from test_sequence import DEFAULT_DURATION_S, Segment, parse_sequence
@@ -94,6 +94,8 @@ def main():
             meta[f"segment_{i}"] = (
                 f"TestName={cfg.test_name or '(defaults)'} | {'reset' if seg.reset else 'add'} | "
                 f"duration_s={duration:g} | files={','.join(seg.active_files) or '-'} | "
+                f"cg_above_axle_m={cg_above_axle_m(cfg):.3f} | "
+                f"clearance_m={cfg.wheel_radius_m - cfg.wheel_z_offset_m - cfg.chassis_half_height_m:.3f} | "
                 f"changes={json.dumps(changes, default=str)}"
             )
     elif args.set:
@@ -125,6 +127,8 @@ def main():
                 label = f"Test {i}/{len(plans)}: {name}"
                 print(f"\n{'=' * 70}\n[Test {i}/{len(plans)}] START  {name}  | {duration:g} s | "
                       f"{'reset' if seg.reset else 'add'} files={','.join(seg.active_files) or '-'}", flush=True)
+                print(f"    CG {cg_above_axle_m(cfg):+.3f} m above axle (negative = stable) | "
+                      f"clearance {cfg.wheel_radius_m - cfg.wheel_z_offset_m - cfg.chassis_half_height_m:.3f} m", flush=True)
                 if changes:
                     print("    changes vs defaults: " + ", ".join(f"{k}={v}" for k, v in changes.items()), flush=True)
                 telemetry.set_segment(i, name)

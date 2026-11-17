@@ -100,6 +100,12 @@ class AGVConfig:
     bar_yaw_damping: float = 2.0                # passive hinge damping
     bar_yaw_hinge_margin_deg: float = 5.0       # hinge stop sits this far beyond the commanded range
 
+    # --- Mass layout (defaults reproduce the original model: all dry mass at the chassis centre) ---
+    battery_mass_kg: float = 0.0                 # part of the dry mass, placed as its own block
+    battery_z_m: float | None = None             # height vs chassis centre; None = axle height
+    water_rigid_z_m: float = 0.06                # the non-sloshing water block
+    slosh_pivot_z_m: float | None = None         # slosh pendulum pivot; None = chassis top + pendulum length
+
     # --- Test sequence info (set by load_config when test files are applied) ---
     test_name: str = ""
     test_duration_s: float | None = None
@@ -321,6 +327,30 @@ def load_config(
         bar_yaw_max_torque_nm=float(bars.get("yaw_max_torque_nm", 200.0)),
         bar_yaw_damping=float(bars.get("yaw_damping", 2.0)),
         bar_yaw_hinge_margin_deg=float(bars.get("yaw_hinge_margin_deg", 5.0)),
+        battery_mass_kg=float(raw.get("mass_layout", {}).get("battery_mass_kg", 0.0)),
+        battery_z_m=raw.get("mass_layout", {}).get("battery_z_m"),
+        water_rigid_z_m=float(raw.get("mass_layout", {}).get("water_rigid_z_m", 0.06)),
+        slosh_pivot_z_m=raw.get("mass_layout", {}).get("slosh_pivot_z_m"),
         test_name=test_name,
         test_duration_s=test_duration,
     )
+
+
+def cg_above_axle_m(cfg: AGVConfig, lead: bool = False) -> float:
+    """Height of one cart's centre of gravity above its axle (negative = CG below the axle, pendulum-stable).
+
+    Cart = chassis (dry mass less battery) at the chassis centre + battery block + rigid and slosh water + wheels."""
+    dry = cfg.lead_dry_mass_kg if lead else cfg.trailer_dry_mass_kg
+    water = cfg.water_liters_per_trailer
+    m_slosh = water * cfg.slosh_mass_fraction
+    pivot = cfg.slosh_pivot_z_m if cfg.slosh_pivot_z_m is not None else cfg.chassis_half_height_m + cfg.slosh_pendulum_len_m
+    batt_z = cfg.battery_z_m if cfg.battery_z_m is not None else cfg.wheel_z_offset_m
+    parts = [
+        (dry - cfg.battery_mass_kg, 0.0),
+        (cfg.battery_mass_kg, batt_z),
+        (water - m_slosh, cfg.water_rigid_z_m),
+        (m_slosh, pivot - cfg.slosh_pendulum_len_m),
+        (2.0 * cfg.wheel_mass_kg, cfg.wheel_z_offset_m),
+    ]
+    total = sum(m for m, _ in parts)
+    return sum(m * z for m, z in parts) / total - cfg.wheel_z_offset_m

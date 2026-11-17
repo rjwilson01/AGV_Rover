@@ -1,6 +1,12 @@
-# Is the sloshing water driving the pitch mode? ~0 = almost no moving water mass (exactly 0 makes a massless body MuJoCo rejects).
+# Is the sloshing water driving the pitch mode? The moving mass is cut 60x (72 kg -> 1.2 kg) and its
+# stiffness/damping are cut by the same factor, so the pendulum keeps its time constants (a tiny mass with
+# the default damping is numerically unstable at a 2 ms step) but barely pushes on the carts.
+# The water is not removed: the other 98% becomes fixed mass.
 [test]
-TestName = "No slosh"
+TestName = "Slosh cut 60x"
 
 [tank_slosh]
-slosh_mass_fraction = 0.002
+slosh_mass_fraction = 0.01
+slosh_roll_stiffness = 1.08
+slosh_pitch_stiffness = 0.58
+slosh_damping = 0.3

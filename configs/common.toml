@@ -94,3 +94,15 @@ gyro_g_sens_dps_per_g = 0.1
 gyro_range_dps = 500.0
 vibration_g_rms = 0.0                       # add broadband accelerometer vibration (engine / cutter blade)
 seed = 1
+
+[gnss]
+# Lead-trailer RTK GNSS (u-blox ZED-F9P class). Used for the lead speed seen by the follower stall guard.
+enabled = true
+rate_hz = 10
+latency_s = 0.1
+pos_noise_m = 0.014
+bias_m = 0.01              # slowly varying position error (std)
+bias_tau_s = 10.0
+vel_noise_mps = 0.05
+outages_s = []             # e.g. [[10.0, 14.0]] = no fix from t=10 to 14 s
+seed = 2

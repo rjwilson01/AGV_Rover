@@ -112,6 +112,17 @@ class AGVConfig:
     guard_min_cmd_mps: float = 0.15
     guard_ramp_s: float = 0.5
 
+    # --- Lead GNSS (u-blox ZED-F9P class, RTK fixed) ---
+    gnss_enabled: bool = True
+    gnss_rate_hz: float = 10.0
+    gnss_latency_s: float = 0.1
+    gnss_pos_noise_m: float = 0.014
+    gnss_bias_m: float = 0.01
+    gnss_bias_tau_s: float = 10.0
+    gnss_vel_noise_mps: float = 0.05
+    gnss_outages_s: tuple = ()
+    gnss_seed: int = 2
+
     # --- IMU per trailer (defaults = Bosch BMI088 datasheet) ---
     imu_enabled: bool = True
     imu_rate_hz: float = 400.0
@@ -362,6 +373,15 @@ def load_config(
         bar_yaw_damping=float(bars.get("yaw_damping", 2.0)),
         bar_yaw_hinge_margin_deg=float(bars.get("yaw_hinge_margin_deg", 5.0)),
         joint_yaw_sign=float(raw["controller"].get("joint_yaw_sign", 1.0)),
+        gnss_enabled=bool(raw.get("gnss", {}).get("enabled", True)),
+        gnss_rate_hz=float(raw.get("gnss", {}).get("rate_hz", 10.0)),
+        gnss_latency_s=float(raw.get("gnss", {}).get("latency_s", 0.1)),
+        gnss_pos_noise_m=float(raw.get("gnss", {}).get("pos_noise_m", 0.014)),
+        gnss_bias_m=float(raw.get("gnss", {}).get("bias_m", 0.01)),
+        gnss_bias_tau_s=float(raw.get("gnss", {}).get("bias_tau_s", 10.0)),
+        gnss_vel_noise_mps=float(raw.get("gnss", {}).get("vel_noise_mps", 0.05)),
+        gnss_outages_s=tuple((float(a), float(b)) for a, b in raw.get("gnss", {}).get("outages_s", [])),
+        gnss_seed=int(raw.get("gnss", {}).get("seed", 2)),
         imu_enabled=bool(imu.get("enabled", True)),
         imu_rate_hz=float(imu.get("rate_hz", 400.0)),
         imu_acc_noise_ug_rthz=tuple(float(v) for v in imu.get("acc_noise_ug_rthz", (160.0, 160.0, 190.0))),

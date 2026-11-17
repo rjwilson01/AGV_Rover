@@ -11,6 +11,7 @@ import mujoco.viewer
 from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import cg_above_axle_m, config_diff, load_config
+from gnss import GNSSModel
 from imu import IMUModel
 from safeguard import FollowerGuard
 from ir_camera import IRCameraModel, relative_euler
@@ -158,6 +159,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
     ir_camera = IRCameraModel(cfg)
     imu_model = IMUModel(cfg) if cfg.imu_enabled else None
     guard = FollowerGuard(cfg)
+    gnss_model = GNSSModel(cfg) if cfg.gnss_enabled else None
 
     wheel_names = [
         f"m_t{i}_{side}"
@@ -212,6 +214,8 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 if imu_model is not None:
                     imu_model.reset()
                 guard.reset()
+                if gnss_model is not None:
+                    gnss_model.reset()
                 apply_neutral_controls()
             prev_sim_time = data.time
 
@@ -245,7 +249,14 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             ramp = min(1.0, t / cfg.start_ramp_s) if cfg.start_ramp_s > 0.0 else 1.0
             # Stall guard: lead commanded vs actual speed (stand-in for lead odometry / GNSS speed)
             v_lead_cmd = abs(0.5 * (wheel_vels[0] + wheel_vels[1])) * cfg.wheel_radius_m * ramp
-            v_lead_meas = float(np.hypot(*data.joint("root_jnt").qvel[:2]))
+            true_vel = data.joint("root_jnt").qvel[:2]
+            gnss = gnss_model.measure(t, pos_xy, true_vel) if gnss_model is not None else None
+            if gnss is None:
+                v_lead_meas = float(np.hypot(*true_vel))      # no GNSS modelled: ideal speed
+            elif gnss.valid:
+                v_lead_meas = gnss.speed
+            else:
+                v_lead_meas = v_lead_cmd                       # no fix: can't judge a stall, hold the guard
             guard_scale = guard.update(t, v_lead_cmd, v_lead_meas)
             for k, (w_name, w_vel) in enumerate(zip(wheel_names, wheel_vels)):
                 data.actuator(w_name).ctrl = w_vel * ramp * (1.0 if k < 2 else guard_scale)
@@ -400,7 +411,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             if duration_s is not None or post_stop_time <= cfg.post_stop_log_sec:
                 telemetry.update(
                     t, pos_xy, lead_hdg, joint_yaws, joint_eulers, forces, extra_metrics,
-                    joint_cables, trailer_positions, ir_readings=ir_readings, imu_readings=imu_readings,
+                    joint_cables, trailer_positions, ir_readings=ir_readings, imu_readings=imu_readings, gnss=gnss,
                 )
 
 

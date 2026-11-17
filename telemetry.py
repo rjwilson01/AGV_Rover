@@ -56,6 +56,7 @@ class TelemetryManager:
         trailer_positions: list[tuple[float, float, float]] | None = None,
         ir_readings: list[tuple[float, float, float]] | None = None,
         imu_readings=None,
+        gnss=None,
     ) -> None:
         # Handle simulator Reset (t jumps backward to 0.0) so rate-limiter doesn't stall
         if t < self.last_stream:
@@ -75,6 +76,12 @@ class TelemetryManager:
         if extra_metrics:
             row.update(extra_metrics)
 
+        if gnss is not None:
+            row["gnss/x_m"] = round(gnss.x, 3)
+            row["gnss/y_m"] = round(gnss.y, 3)
+            row["gnss/speed_mps"] = round(gnss.speed, 3)
+            row["gnss/valid"] = int(gnss.valid)
+            row["gnss/pos_err_m"] = round(float(np.hypot(gnss.x - pos_xy[0], gnss.y - pos_xy[1])), 3)
         if imu_readings is not None:
             for n, r in enumerate(imu_readings, start=1):
                 for ax, v in zip("xyz", r.acc):

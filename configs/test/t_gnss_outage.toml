@@ -1,0 +1,5 @@
+# Lead GNSS fix lost 8-12 s: guard must hold (not trip) and the run should carry on.
+[test]
+duration_s = 20
+[gnss]
+outages_s = [[8.0, 12.0]]

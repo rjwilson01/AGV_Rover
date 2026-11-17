@@ -64,6 +64,7 @@ class AGVConfig:
     # Controller
     active_path: str
     v_center_mps: float
+    start_ramp_s: float
     lookahead_dist_m: float
     goal_tol_m: float
     max_curvature: float
@@ -203,6 +204,7 @@ def load_config(
         capstan_max_pull_n=float(a["capstan_max_pull_n"]),
         active_path=active_name,
         v_center_mps=float(c["v_center_mps"]),
+        start_ramp_s=float(c.get("start_ramp_s", 0.0)),
         lookahead_dist_m=float(c["lookahead_dist_m"]),
         goal_tol_m=float(c["goal_tol_m"]),
         max_curvature=float(c["max_curvature"]),

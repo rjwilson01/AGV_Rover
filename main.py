@@ -114,8 +114,9 @@ def main():
             ir_readings = ir_camera.measure(t, trailer_quats)
 
             wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
+            ramp = min(1.0, t / cfg.start_ramp_s) if cfg.start_ramp_s > 0.0 else 1.0
             for w_name, w_vel in zip(wheel_names, wheel_vels):
-                data.actuator(w_name).ctrl = w_vel
+                data.actuator(w_name).ctrl = w_vel * ramp
 
             if bars:
                 # With yaw tubes the ball joint is only part of the hitch: use the true trailer-to-trailer R/P/Y.

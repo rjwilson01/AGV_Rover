@@ -15,7 +15,7 @@ ball_joint_limit_deg = 55.0
 
 [controller]
 active_path = "u_turn_180"
-v_center_mps = 0.0
+v_center_mps = 1.05
 lookahead_dist_m = 1.60
 max_curvature = 0.55
 yaw_gain = -1.00

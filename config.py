@@ -104,6 +104,21 @@ class AGVConfig:
     wheel_speed_from_ir: bool = False
     joint_yaw_sign: float = 1.0                 # -1 flips controller yaws to physical hinge/ball commands
 
+    # --- IMU per trailer (defaults = Bosch BMI088 datasheet) ---
+    imu_enabled: bool = True
+    imu_rate_hz: float = 400.0
+    imu_acc_noise_ug_rthz: tuple[float, float, float] = (160.0, 160.0, 190.0)
+    imu_acc_bw_hz: float = 145.0
+    imu_acc_offset_mg: float = 20.0
+    imu_acc_range_g: float = 6.0
+    imu_gyro_noise_dps_rthz: float = 0.014
+    imu_gyro_bw_hz: float = 116.0
+    imu_gyro_offset_dps: float = 1.0
+    imu_gyro_g_sens_dps_per_g: float = 0.1
+    imu_gyro_range_dps: float = 500.0
+    imu_vibration_g_rms: float = 0.0            # extra broadband vibration on the accelerometer (engine/blade)
+    imu_seed: int = 1
+
     # --- Mass layout (defaults reproduce the original model: all dry mass at the chassis centre) ---
     battery_mass_kg: float = 0.0                 # part of the dry mass, placed as its own block
     battery_z_m: float | None = None             # height vs chassis centre; None = axle height
@@ -252,6 +267,7 @@ def load_config(
     sim = raw["simulation"]
     v = raw["viewer"]
     ir = raw.get("ir_camera", {})
+    imu = raw.get("imu", {})
     bars = raw.get("bars", {})
 
     r_min, r_max = d["rear_bar_range_m"]
@@ -332,6 +348,19 @@ def load_config(
         bar_yaw_damping=float(bars.get("yaw_damping", 2.0)),
         bar_yaw_hinge_margin_deg=float(bars.get("yaw_hinge_margin_deg", 5.0)),
         joint_yaw_sign=float(raw["controller"].get("joint_yaw_sign", 1.0)),
+        imu_enabled=bool(imu.get("enabled", True)),
+        imu_rate_hz=float(imu.get("rate_hz", 400.0)),
+        imu_acc_noise_ug_rthz=tuple(float(v) for v in imu.get("acc_noise_ug_rthz", (160.0, 160.0, 190.0))),
+        imu_acc_bw_hz=float(imu.get("acc_bw_hz", 145.0)),
+        imu_acc_offset_mg=float(imu.get("acc_offset_mg", 20.0)),
+        imu_acc_range_g=float(imu.get("acc_range_g", 6.0)),
+        imu_gyro_noise_dps_rthz=float(imu.get("gyro_noise_dps_rthz", 0.014)),
+        imu_gyro_bw_hz=float(imu.get("gyro_bw_hz", 116.0)),
+        imu_gyro_offset_dps=float(imu.get("gyro_offset_dps", 1.0)),
+        imu_gyro_g_sens_dps_per_g=float(imu.get("gyro_g_sens_dps_per_g", 0.1)),
+        imu_gyro_range_dps=float(imu.get("gyro_range_dps", 500.0)),
+        imu_vibration_g_rms=float(imu.get("vibration_g_rms", 0.0)),
+        imu_seed=int(imu.get("seed", 1)),
         wheel_speed_from_ir=bool(raw["controller"].get("wheel_speed_from_ir", False)),
         battery_mass_kg=float(raw.get("mass_layout", {}).get("battery_mass_kg", 0.0)),
         battery_z_m=raw.get("mass_layout", {}).get("battery_z_m"),

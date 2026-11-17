@@ -72,3 +72,19 @@ u_turn_180 = [
     [5.0, 6.0],
     [0.0, 6.0],
 ]
+
+[imu]
+# One 6-axis IMU per trailer (Bosch BMI088). Values are datasheet figures; sample-and-hold at rate_hz.
+enabled = true
+rate_hz = 400
+acc_noise_ug_rthz = [160.0, 160.0, 190.0]   # X, Y, Z (+-3 g range)
+acc_bw_hz = 145.0
+acc_offset_mg = 20.0
+acc_range_g = 6.0
+gyro_noise_dps_rthz = 0.014
+gyro_bw_hz = 116.0
+gyro_offset_dps = 1.0
+gyro_g_sens_dps_per_g = 0.1
+gyro_range_dps = 500.0
+vibration_g_rms = 0.0                       # add broadband accelerometer vibration (engine / cutter blade)
+seed = 1

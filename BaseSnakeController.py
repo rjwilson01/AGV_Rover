@@ -143,6 +143,7 @@ class BaseSnakeController(ABC):
         v_center: float | None = None,
         lookahead_dist: float | None = None,
         ir_readings: Sequence[tuple[float, float, float]] | None = None,
+        imu_readings=None,
     ) -> tuple[list[float], list[float], list[tuple[float, float]]]:
         """Returns (wheel_vels, joint_yaws, bar_lengths[(rear_m, front_m), ...]).
 

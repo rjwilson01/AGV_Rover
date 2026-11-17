@@ -9,7 +9,8 @@ class VariableDrawbarController(BaseSnakeController):
     without saturating asymmetric joint stops, and extends toward L_max on straights.
     """
 
-    def step(self, pos_xy, lead_hdg_rad: float, v_center=None, lookahead_dist=None, ir_readings=None):
+    def step(self, pos_xy, lead_hdg_rad: float, v_center=None, lookahead_dist=None, ir_readings=None, imu_readings=None):
+        self.last_imu = imu_readings
         self._store_ir(ir_readings)
         v_cmd = self.cfg.v_center_mps if v_center is None else v_center
         ld_cmd = self.cfg.lookahead_dist_m if lookahead_dist is None else lookahead_dist

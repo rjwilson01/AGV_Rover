@@ -114,6 +114,8 @@ def _build_trailer_body(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
         f'{b_ind}\t<geom name="t{idx}_chassis" type="box" '
         f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass - cfg.battery_mass_kg:.1f}" material="{mat}"/>'
     )
+    if cfg.imu_enabled:
+        lines.append(f'{b_ind}\t<site name="t{idx}_imu" pos="0 0 0" size="0.01"/>')
     batt_xml = _battery_xml(idx, cfg, b_ind + "\t")
     if batt_xml:
         lines.append(batt_xml.rstrip("\n"))
@@ -236,6 +238,8 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
     mat = "chassis_lead" if is_lead else "chassis_trl"
     add(lv, f'<geom name="t{idx}_chassis" type="box" '
             f'size="{cx:.3f} {cfg.chassis_half_width_m:.3f} {cfg.chassis_half_height_m:.3f}" mass="{mass - cfg.battery_mass_kg:.1f}" material="{mat}"/>')
+    if cfg.imu_enabled:
+        add(lv, f'<site name="t{idx}_imu" pos="0 0 0" size="0.01"/>')
     batt_xml = _battery_xml(idx, cfg, "\t" * (depth + lv))
     if batt_xml:
         out.append(batt_xml.rstrip("\n"))
@@ -333,6 +337,13 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
                 f'forcerange="-{cfg.telescoping_max_force_n} {cfg.telescoping_max_force_n}"/>'
             )
 
+    sensor_xml = ""
+    if cfg.imu_enabled:
+        rows = []
+        for i in range(1, cfg.num_trailers + 1):
+            rows.append(f'\t\t<accelerometer name="t{i}_acc" site="t{i}_imu"/>')
+            rows.append(f'\t\t<gyro name="t{i}_gyro" site="t{i}_imu"/>')
+        sensor_xml = "\t<sensor>\n" + "\n".join(rows) + "\n\t</sensor>\n"
     return f"""<mujoco model="agv_{cfg.num_trailers}trailer_{cfg.drawbar_mode}">
 \t<option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
 \t<visual>
@@ -365,4 +376,4 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 {chr(10).join(capstan_acts)}
 {chr(10).join(slide_acts)}
 \t</actuator>
-</mujoco>"""
+{sensor_xml}</mujoco>"""

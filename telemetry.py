@@ -5,6 +5,7 @@ import subprocess
 import time
 from pathlib import Path
 import numpy as np
+from imu import tilt_from_accel
 from pj_launcher import launch_plotjuggler
 
 
@@ -54,6 +55,7 @@ class TelemetryManager:
         joint_cables: dict[str, tuple[float, float]] | None = None,
         trailer_positions: list[tuple[float, float, float]] | None = None,
         ir_readings: list[tuple[float, float, float]] | None = None,
+        imu_readings=None,
     ) -> None:
         # Handle simulator Reset (t jumps backward to 0.0) so rate-limiter doesn't stall
         if t < self.last_stream:
@@ -72,6 +74,16 @@ class TelemetryManager:
         }
         if extra_metrics:
             row.update(extra_metrics)
+
+        if imu_readings is not None:
+            for n, r in enumerate(imu_readings, start=1):
+                for ax, v in zip("xyz", r.acc):
+                    row[f"imu{n}/acc_{ax}_mps2"] = round(float(v), 4)
+                for ax, v in zip("xyz", r.gyro):
+                    row[f"imu{n}/gyro_{ax}_dps"] = round(float(np.rad2deg(v)), 4)
+                p, ro = tilt_from_accel(r.acc)
+                row[f"imu{n}/acc_pitch_deg"] = round(float(np.rad2deg(p)), 3)
+                row[f"imu{n}/acc_roll_deg"] = round(float(np.rad2deg(ro)), 3)
 
         # Automatically emits joint1/..., joint2/..., ..., jointN/... for any number of trailers
         for idx, (y_cmd, (yaw_meas, pitch_meas, roll_meas)) in enumerate(

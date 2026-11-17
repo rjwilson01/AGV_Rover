@@ -11,6 +11,7 @@ import mujoco.viewer
 from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import cg_above_axle_m, config_diff, load_config
+from imu import IMUModel
 from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
 from test_sequence import DEFAULT_DURATION_S, Segment, parse_sequence
@@ -154,6 +155,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
     lead_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trailer_1")
     controller = create_controller(cfg)
     ir_camera = IRCameraModel(cfg)
+    imu_model = IMUModel(cfg) if cfg.imu_enabled else None
 
     wheel_names = [
         f"m_t{i}_{side}"
@@ -205,6 +207,8 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 post_stop_time = 0.0
                 controller.reset()
                 ir_camera.reset()
+                if imu_model is not None:
+                    imu_model.reset()
                 apply_neutral_controls()
             prev_sim_time = data.time
 
@@ -220,6 +224,13 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             mujoco.mj_kinematics(model, data)
             trailer_quats = [data.body(f"trailer_{i}").xquat for i in range(1, cfg.num_trailers + 1)]
             ir_readings = ir_camera.measure(t, trailer_quats)
+            imu_readings = None
+            if imu_model is not None:
+                imu_readings = imu_model.measure(
+                    t,
+                    [data.sensor(f"t{i}_acc").data for i in range(1, cfg.num_trailers + 1)],
+                    [data.sensor(f"t{i}_gyro").data for i in range(1, cfg.num_trailers + 1)],
+                )
 
             wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
             # Controller yaws are positive for a left turn. The physical yaw of a follower relative to its leader is
@@ -379,7 +390,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             if duration_s is not None or post_stop_time <= cfg.post_stop_log_sec:
                 telemetry.update(
                     t, pos_xy, lead_hdg, joint_yaws, joint_eulers, forces, extra_metrics,
-                    joint_cables, trailer_positions, ir_readings=ir_readings,
+                    joint_cables, trailer_positions, ir_readings=ir_readings, imu_readings=imu_readings,
                 )
 
 

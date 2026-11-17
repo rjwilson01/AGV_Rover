@@ -1,0 +1,9 @@
+# Same idea as t_big_wheels_stable but with ground clearance for the 5 cm ruts (chassis bottom was only 0.05 m up
+# and snagged on them). Radius 0.30, axle +0.08 above the chassis centre: body height 0.22 m, chassis bottom 0.10 m
+# off the ground, CG ~0.04 m below the axle.
+[test]
+TestName = "Wheels 0.30 m, axle +0.08 (CG below axle, 0.10 m clearance)"
+
+[geometry]
+wheel_radius_m = 0.30
+wheel_z_offset_m = 0.08

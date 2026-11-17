@@ -1,0 +1,5 @@
+# Wider U-turn (radius >= ~3.4 m) that the hitch-limited planner can follow without saturating.
+[test]
+duration_s = 30
+[controller]
+active_path = "u_turn_wide"

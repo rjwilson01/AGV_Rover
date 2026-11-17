@@ -40,6 +40,10 @@ capstan_max_pull_n = 6000.0
 [controller]
 active_path = "paddock_turn"
 goal_tol_m = 0.25
+planner_enabled = true             # Round waypoint corners with arcs and cap curvature at what the hitches can follow
+planner_margin = 0.85              # fraction of the hitch yaw range the planner may use
+planner_spacing_m = 0.05
+planner_radius_cap_m = 8.0
 guard_enabled = true               # Followers stop if the lead is commanded to move but isn't (blocked/collided)
 guard_stall_ratio = 0.3            # stalled when measured lead speed < this x commanded ...
 guard_stall_time_s = 0.5           # ... for this long
@@ -69,6 +73,14 @@ paddock_turn = [
     [0.0, 0.0],
     [6.0, 0.0],
     [10.0, 4.0],
+]
+u_turn_wide = [
+    [0.0, 0.0],
+    [6.0, 0.0],
+    [10.0, 2.2],
+    [10.0, 6.2],
+    [6.0, 8.4],
+    [0.0, 8.4],
 ]
 u_turn_180 = [
     [0.0, 0.0],

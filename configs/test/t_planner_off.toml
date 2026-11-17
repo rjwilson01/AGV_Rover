@@ -1,0 +1,5 @@
+# Old behaviour: raw waypoint polyline, curvature clipped only by max_curvature.
+[test]
+duration_s = 30
+[controller]
+planner_enabled = false

@@ -104,6 +104,12 @@ class AGVConfig:
     wheel_speed_from_ir: bool = False
     joint_yaw_sign: float = 1.0                 # -1 flips controller yaws to physical hinge/ball commands
 
+    # --- Path planner ---
+    planner_enabled: bool = True
+    planner_margin: float = 0.85               # fraction of the hitch yaw range the planner may use
+    planner_spacing_m: float = 0.05
+    planner_radius_cap_m: float = 8.0
+
     # --- Follower stall guard ---
     guard_enabled: bool = True
     guard_stall_ratio: float = 0.3
@@ -338,6 +344,10 @@ def load_config(
         active_path=active_name,
         v_center_mps=float(c["v_center_mps"]),
         start_ramp_s=float(c.get("start_ramp_s", 0.0)),
+        planner_enabled=bool(c.get("planner_enabled", True)),
+        planner_margin=float(c.get("planner_margin", 0.85)),
+        planner_spacing_m=float(c.get("planner_spacing_m", 0.05)),
+        planner_radius_cap_m=float(c.get("planner_radius_cap_m", 8.0)),
         guard_enabled=bool(c.get("guard_enabled", True)),
         guard_stall_ratio=float(c.get("guard_stall_ratio", 0.3)),
         guard_release_ratio=float(c.get("guard_release_ratio", 0.6)),

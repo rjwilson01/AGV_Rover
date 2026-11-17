@@ -3,6 +3,7 @@ from collections import deque
 from collections.abc import Sequence
 import importlib
 import numpy as np
+from planner import chain_curvature_limit, plan_path
 from config import AGVConfig
 
 PATH_HISTORY_MAX_SAMPLES = 4000
@@ -57,6 +58,16 @@ class BaseSnakeController(ABC):
     def __init__(self, cfg: AGVConfig):
         self.cfg = cfg
         self.waypoints = np.asarray(cfg.waypoints, dtype=float)
+        self.max_curvature = cfg.max_curvature
+        self.plan = None
+        if cfg.planner_enabled:
+            k_chain = chain_curvature_limit(cfg, cfg.planner_margin)
+            self.plan = plan_path(self.waypoints, k_chain, cfg.planner_spacing_m, cfg.planner_radius_cap_m)
+            self.waypoints = self.plan.points
+            if k_chain > 0:
+                self.max_curvature = min(cfg.max_curvature, k_chain)
+            for w in self.plan.warnings:
+                print(f"[planner] WARNING: {w}")
         self.num_trailers = cfg.num_trailers
         self.num_joints = cfg.num_trailers - 1
         self.yaw_min_rad = np.deg2rad(cfg.yaw_angle_range_deg[0])
@@ -87,22 +98,14 @@ class BaseSnakeController(ABC):
         ]
 
     def _get_lookahead_point(self, pos_xy, lookahead_dist: float):
-        best_dist = float("inf")
-        best_seg_idx = 0
-        best_proj = self.waypoints[0]
-
-        for i in range(len(self.waypoints) - 1):
-            a = self.waypoints[i]
-            b = self.waypoints[i + 1]
-            ab = b - a
-            ab_len_sq = float(np.dot(ab, ab))
-            t = np.clip(np.dot(pos_xy - a, ab) / (ab_len_sq + NUMERIC_EPS), 0.0, 1.0)
-            proj = a + t * ab
-            d = float(np.linalg.norm(pos_xy - proj))
-            if d < best_dist:
-                best_dist = d
-                best_seg_idx = i
-                best_proj = proj
+        A = self.waypoints[:-1]
+        AB = self.waypoints[1:] - A
+        ab_len_sq = np.einsum("ij,ij->i", AB, AB)
+        t_proj = np.clip(np.einsum("ij,ij->i", pos_xy - A, AB) / (ab_len_sq + NUMERIC_EPS), 0.0, 1.0)
+        proj_all = A + t_proj[:, None] * AB
+        dists = np.linalg.norm(pos_xy - proj_all, axis=1)
+        best_seg_idx = int(np.argmin(dists))
+        best_proj = proj_all[best_seg_idx]
 
         rem = lookahead_dist
         curr_pt = best_proj
@@ -133,7 +136,7 @@ class BaseSnakeController(ABC):
         x_loc = c * dx - s * dy
         y_loc = s * dx + c * dy
         ld_sq = max(x_loc**2 + y_loc**2, MIN_LOOKAHEAD_SQ_M2)
-        return float(np.clip((2.0 * y_loc) / ld_sq, -self.cfg.max_curvature, self.cfg.max_curvature))
+        return float(np.clip((2.0 * y_loc) / ld_sq, -self.max_curvature, self.max_curvature))
 
     @abstractmethod
     def step(

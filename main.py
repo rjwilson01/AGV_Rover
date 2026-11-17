@@ -81,6 +81,7 @@ def main():
             duration = DEFAULT_DURATION_S                     # headless has no window to close
         else:
             duration = None                                   # interactive: run until the viewer is closed
+        mujoco.MjModel.from_xml_string(generate_mujoco_xml(cfg))   # compile now: a bad test file fails before anything runs
         changes = config_diff(args.preset, test_files=seg.active_files, set_overrides=args.set)
         plans.append((seg, cfg, duration, changes))
 

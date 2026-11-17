@@ -1,6 +1,6 @@
-# Is the sloshing water driving the pitch mode? 0 = no moving water mass (water still adds fixed mass).
+# Is the sloshing water driving the pitch mode? ~0 = almost no moving water mass (exactly 0 makes a massless body MuJoCo rejects).
 [test]
 TestName = "No slosh"
 
 [tank_slosh]
-slosh_mass_fraction = 0.0
+slosh_mass_fraction = 0.002

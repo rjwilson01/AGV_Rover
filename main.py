@@ -307,6 +307,10 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 extra_metrics[f"trailer{i_t}/z_m"] = round(float(data.body(f"trailer_{i_t}").xpos[2]), 4)
                 extra_metrics[f"trailer{i_t}/wheel_torque_l_Nm"] = round(float(data.actuator(f"m_t{i_t}_l").force.item()), 2)
                 extra_metrics[f"trailer{i_t}/wheel_torque_r_Nm"] = round(float(data.actuator(f"m_t{i_t}_r").force.item()), 2)
+                # wheel speed: what was commanded (after the start ramp) vs what the wheel is actually doing
+                for side in ("l", "r"):
+                    extra_metrics[f"trailer{i_t}/wheel_speed_{side}_rad_s"] = round(float(data.joint(f"j_t{i_t}_{side}").qvel.item()), 3)
+                    extra_metrics[f"trailer{i_t}/wheel_cmd_{side}_rad_s"] = round(float(data.actuator(f"m_t{i_t}_{side}").ctrl.item()), 3)
             bar_meas_raw = [(r_max, f_max)] * cfg.num_joints    # unrounded, for the geometry below
             for j_idx in range(cfg.num_joints):
                 r_jnt = f"slide_rear_{j_idx + 1}"

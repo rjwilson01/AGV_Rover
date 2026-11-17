@@ -1,0 +1,6 @@
+# Is the sloshing water driving the pitch mode? 0 = no moving water mass (water still adds fixed mass).
+[test]
+TestName = "No slosh"
+
+[tank_slosh]
+slosh_mass_fraction = 0.0

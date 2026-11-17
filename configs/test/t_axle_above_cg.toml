@@ -1,0 +1,5 @@
+[test]
+TestName = "Axle above CG (+0.06)"
+
+[geometry]
+wheel_z_offset_m = 0.06

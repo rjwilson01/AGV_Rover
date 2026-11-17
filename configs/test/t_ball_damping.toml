@@ -1,0 +1,6 @@
+# Heavy damping on the ball joint (default 12) to damp relative pitch/roll between carts.
+[test]
+TestName = "Ball damping 200"
+
+[geometry]
+ball_joint_damping = 200.0

@@ -1,0 +1,9 @@
+# Stiffer cables and ~900 N preload so top AND bottom cables stay taut (currently ~4 N, top cables go slack).
+[test]
+TestName = "Stiff + preloaded cables"
+
+[geometry]
+cable_preload_offset_m = 0.015
+
+[actuators]
+capstan_kp = 60000.0

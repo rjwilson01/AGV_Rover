@@ -1,0 +1,7 @@
+# Axle at chassis-centre height instead of 0.14 m below it (CG above the axle is pitch-unstable per cart).
+# The trailer body height follows automatically. Try +0.06 for CG below the axle (pendulum-stable).
+[test]
+TestName = "Axle at chassis centre"
+
+[geometry]
+wheel_z_offset_m = 0.0

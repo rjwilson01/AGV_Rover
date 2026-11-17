@@ -360,7 +360,8 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 tuple(float(v) for v in data.body(f"trailer_{i}").xpos)
                 for i in range(1, cfg.num_trailers + 1)
             ]
-            if post_stop_time <= cfg.post_stop_log_sec:
+            # Timed test runs log the whole duration; interactive runs stop logging shortly after the vehicle stops
+            if duration_s is not None or post_stop_time <= cfg.post_stop_log_sec:
                 telemetry.update(
                     t, pos_xy, lead_hdg, joint_yaws, joint_eulers, forces, extra_metrics,
                     joint_cables, trailer_positions, ir_readings=ir_readings,

@@ -1,0 +1,7 @@
+# Batteries slung low, under the axle line and between the wheels (-0.15 m from the chassis centre) so the
+# 65 kg sits as low as the ground clearance allows. Use with t_real_layout and a wheel file.
+[test]
+TestName = "Batteries slung low (-0.15)"
+
+[mass_layout]
+battery_z_m = -0.15

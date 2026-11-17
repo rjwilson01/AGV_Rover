@@ -1,0 +1,7 @@
+# Wheel speed ramps from 0 to full over 2 s instead of stepping (avoids the launch torque kick).
+# Compare against example_softstart_off. If it works it is already the default in common.toml.
+[test]
+TestName = "Soft start on (2 s ramp)"
+
+[controller]
+start_ramp_s = 2.0

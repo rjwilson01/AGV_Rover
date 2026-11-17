@@ -258,12 +258,16 @@ def launch_plotjuggler(base_dir: Path, udp_port: int = 9870, num_joints: int = 1
     env["PLOTJUGGLER_ACCEPT_PREVIOUSLY_USED_STREAMING_PLUGIN"] = "1"
     env["PLOTJUGGLER_CHOOSE_EMPTY_PLACEHOLDERS_ON_MISSING_TIMESERIES"] = "1"
 
+    # PlotJuggler is very chatty (graphics/plugin messages): keep it out of the sim terminal
+    pj_log = open(base_dir / "plotjuggler.log", "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen(
         [
             "C:/Program Files/PlotJuggler4/bin/PlotJuggler4.exe",
             "--nosplash",
         ],
         env=env,
+        stdout=pj_log,
+        stderr=subprocess.STDOUT,
     )
 
     # Run UI automation in a daemon thread so it doesn't block your simulation loop

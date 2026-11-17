@@ -36,6 +36,14 @@ class _NullViewer:
         pass
 
 
+def _set_status(viewer, line1: str, line2: str) -> None:
+    """Show the current test step in the MuJoCo window (top-left). Silently skipped on old MuJoCo builds."""
+    try:
+        viewer.set_texts((mujoco.mjtFont.mjFONT_BIG, mujoco.mjtGridPos.mjGRID_TOPLEFT, line1, line2))
+    except Exception:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description="Snake AGV simulation")
     parser.add_argument("preset", nargs="?", default=None, help="controller preset, e.g. VariableDrawbarController")
@@ -110,12 +118,19 @@ def main():
     )
     try:
         for i, (seg, cfg, duration, changes) in enumerate(plans, start=1):
+            label = ""
             if args.tests:
-                print(f"[Test {i}/{len(plans)}] {cfg.test_name or '(defaults)'} | {duration:g} s | "
-                      f"files={','.join(seg.active_files) or '-'}")
-                telemetry.set_segment(i, cfg.test_name or "(defaults)")
-            finished = run_sim(cfg, telemetry, duration, show_viewer=not args.no_viewer)
+                name = cfg.test_name or "(defaults)"
+                label = f"Test {i}/{len(plans)}: {name}"
+                print(f"\n{'=' * 70}\n[Test {i}/{len(plans)}] START  {name}  | {duration:g} s | "
+                      f"{'reset' if seg.reset else 'add'} files={','.join(seg.active_files) or '-'}", flush=True)
+                if changes:
+                    print("    changes vs defaults: " + ", ".join(f"{k}={v}" for k, v in changes.items()), flush=True)
+                telemetry.set_segment(i, name)
+            finished = run_sim(cfg, telemetry, duration, show_viewer=not args.no_viewer, status_label=label)
             telemetry.flush_csv()
+            if args.tests and finished:
+                print(f"[Test {i}/{len(plans)}] DONE   {cfg.test_name or '(defaults)'}", flush=True)
             if not finished:
                 print("[Test] viewer closed - stopping the sequence")
                 break
@@ -123,7 +138,7 @@ def main():
         telemetry.close()
 
 
-def run_sim(cfg, telemetry, duration_s=None, show_viewer=True) -> bool:
+def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") -> bool:
     """Run one simulation. Returns True if it ran to duration_s, False if the viewer was closed first."""
     print(f"[Sim] Loaded controller={cfg.controller_class} | mode={cfg.drawbar_mode} | path={cfg.active_path}")
 
@@ -165,6 +180,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True) -> bool:
     post_stop_time = 0.0
 
     finished = False
+    last_status = -1.0
     with (mujoco.viewer.launch_passive(model, data) if show_viewer else nullcontext(_NullViewer())) as viewer:
         if show_viewer:
             viewer.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
@@ -177,6 +193,9 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True) -> bool:
             if duration_s is not None and data.time >= duration_s:
                 finished = True
                 break
+            if show_viewer and status_label and data.time - last_status >= 0.25:
+                last_status = data.time
+                _set_status(viewer, status_label, f"t = {data.time:5.1f} / {duration_s:g} s" if duration_s else "")
             if data.time < prev_sim_time:
                 post_stop_time = 0.0
                 controller.reset()

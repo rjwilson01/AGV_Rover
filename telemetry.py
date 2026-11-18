@@ -28,7 +28,7 @@ class TelemetryManager:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.enable_csv = enable_csv
         self.meta = {"log_version": 1, "git_commit": _git_version(base_dir),
-                     "build_tag": os.environ.get("buildtag") or os.environ.get("BUILDTAG") or "(not set)",
+                     "build_tag": os.environ.get("BUILD_TAG") or os.environ.get("buildtag") or os.environ.get("BUILDTAG") or "(not set)",
                      "started": time.strftime("%Y-%m-%dT%H:%M:%S"), **(meta or {})}
         self.csv_path = base_dir / "sim_log.csv"   # same file every run: just overwrite it, then git push
         self.csv_rows = []

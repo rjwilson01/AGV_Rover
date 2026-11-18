@@ -60,6 +60,7 @@ def main():
         help="override one config value (TOML syntax); beats every test file. Repeatable.",
     )
     parser.add_argument("--plotjuggler", action="store_true", help="launch PlotJuggler (off by default)")
+    parser.add_argument("--selfcheck", action="store_true", help="measure the sign conventions with short open-loop moves, then exit")
     parser.add_argument("--no-viewer", action="store_true", help="run headless, faster than real time")
     # argparse treats a value starting with '-' (e.g. "--tests -200-a,b") as a new option: glue it on as --tests=VALUE
     argv = sys.argv[1:]
@@ -70,6 +71,13 @@ def main():
     args = parser.parse_args(argv)
 
     base_dir = Path(__file__).resolve().parent
+
+    if args.selfcheck:
+        from selfcheck import run_selfcheck
+        files = parse_sequence(args.tests)[-1].active_files if args.tests else ()
+        cfg = load_config(args.preset, test_files=files, set_overrides=args.set)
+        ok = run_selfcheck(cfg, base_dir / "sim_log.csv")
+        return 0 if ok else 1
 
     # ---- plan every segment up front so a typo in any test file fails before anything runs
     if args.tests:

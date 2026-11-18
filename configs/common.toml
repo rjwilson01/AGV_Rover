@@ -61,12 +61,14 @@ udp_host = "127.0.0.1"
 udp_port = 9870
 stream_hz = 50.0
 save_csv_log = true
+launch_plotjuggler = false          # true (or --plotjuggler) starts PlotJuggler automatically; UDP streaming stays on
 post_stop_log_sec = 2.0
 
 [viewer]
 camera_distance_m = 6.0
 camera_azimuth_deg = 90.0
 camera_elevation_deg = -45.0
+show_bar_overlay = false           # orange/green debug lines for commanded/measured bar direction
 
 [paths]
 paddock_turn = [

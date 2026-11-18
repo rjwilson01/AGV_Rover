@@ -104,6 +104,11 @@ class AGVConfig:
     wheel_speed_from_ir: bool = False
     joint_yaw_sign: float = 1.0                 # -1 flips controller yaws to physical hinge/ball commands
 
+    # --- Tooling / display ---
+    launch_plotjuggler: bool = False
+    show_bar_overlay: bool = False             # orange (commanded) / green (measured) bar lines drawn over the model
+    bar_min_engagement_m: float = 0.10         # minimum rod-in-tube overlap at full extension (build check)
+
     # --- Path planner ---
     planner_enabled: bool = True
     planner_margin: float = 0.85               # fraction of the hitch yaw range the planner may use
@@ -344,6 +349,9 @@ def load_config(
         active_path=active_name,
         v_center_mps=float(c["v_center_mps"]),
         start_ramp_s=float(c.get("start_ramp_s", 0.0)),
+        launch_plotjuggler=bool(sim.get("launch_plotjuggler", False)),
+        show_bar_overlay=bool(v.get("show_bar_overlay", False)),
+        bar_min_engagement_m=float(bars.get("min_engagement_m", 0.10)),
         planner_enabled=bool(c.get("planner_enabled", True)),
         planner_margin=float(c.get("planner_margin", 0.85)),
         planner_spacing_m=float(c.get("planner_spacing_m", 0.05)),

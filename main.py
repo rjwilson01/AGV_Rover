@@ -59,6 +59,7 @@ def main():
         "--set", action="append", default=[], metavar="SECTION.KEY=VALUE",
         help="override one config value (TOML syntax); beats every test file. Repeatable.",
     )
+    parser.add_argument("--plotjuggler", action="store_true", help="launch PlotJuggler (off by default)")
     parser.add_argument("--no-viewer", action="store_true", help="run headless, faster than real time")
     # argparse treats a value starting with '-' (e.g. "--tests -200-a,b") as a new option: glue it on as --tests=VALUE
     argv = sys.argv[1:]
@@ -119,6 +120,7 @@ def main():
         udp_host=first_cfg.udp_host,
         udp_port=first_cfg.udp_port,
         enable_csv=first_cfg.save_csv_log,
+        launch_pj=first_cfg.launch_plotjuggler or args.plotjuggler,
         bar_yaw=first_cfg.bar_yaw_control,
         meta=meta,
     )
@@ -318,7 +320,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
             if show_viewer:
                 with viewer.lock():
                     render_path_overlay(viewer, cfg.waypoints, controller.last_lookahead)
-                    if bars:
+                    if bars and cfg.show_bar_overlay:
                         render_bar_yaw_overlay(viewer, data, cfg, bar_yaws, controller.last_bar_lengths)
                 viewer.sync()
 

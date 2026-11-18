@@ -70,6 +70,28 @@ def validate_bar_config(cfg: AGVConfig) -> None:
             )
 
 
+def bar_packaging_warnings(cfg: AGVConfig) -> list[str]:
+    """Mechanical sanity checks on the telescoping bars (tube outside the chassis, rod slides in from the ball end)."""
+    p = pivot_x_m(cfg)
+    out = []
+    for name, (b_min, b_max) in (("rear", cfg.rear_bar_range_m), ("front", cfg.front_bar_range_m)):
+        tube = max(0.05, b_min - p - 0.02)
+        stroke = b_max - b_min
+        engage = tube - stroke
+        if stroke > 0 and engage < cfg.bar_min_engagement_m:
+            out.append(
+                f"{name} bar: only {engage * 100:.0f} cm of rod stays inside the tube at full extension "
+                f"(tube {tube:.2f} m, stroke {stroke:.2f} m, want >= {cfg.bar_min_engagement_m * 100:.0f} cm)"
+            )
+        housed = 2.0 * (stroke + cfg.bar_min_engagement_m)
+        if stroke > 0 and housed > 2.0 * cfg.chassis_half_len_m:
+            out.append(
+                f"{name} bar: housing the tubes inside the chassis would need {housed:.2f} m for both ends but the "
+                f"chassis is {2 * cfg.chassis_half_len_m:.2f} m long: the rods would meet. Keep the tubes outside."
+            )
+    return out
+
+
 def hitch_transform(
     psi_r: float,
     psi_f: float,

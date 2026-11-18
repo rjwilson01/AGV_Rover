@@ -1,0 +1,6 @@
+# Stage 2: realistic instruments (IR camera noise, delay and quantisation; BMI088 and ZED-F9P figures are the
+# defaults). Compare against t_ideal_sensors: the difference is what the sensors cost you.
+[ir_camera]
+noise_std_deg = 0.3
+latency_s = 0.05
+quantization_deg = 0.1

@@ -1,0 +1,3 @@
+# Stage 3: add engine/cutter-blade vibration on the IMU on top of t_real_sensors.
+[imu]
+vibration_g_rms = 0.3

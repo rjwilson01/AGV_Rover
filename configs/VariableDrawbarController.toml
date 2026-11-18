@@ -14,8 +14,10 @@ telescoping_max_force_n = 8000.0
 ball_joint_limit_deg = 55.0
 
 [controller]
-# Verified together in runs 20261117: yaw tracking error median 1 deg (was 14 deg), tension peak ~2 kN (was 5-6 kN)
-joint_yaw_sign = -1.0          # follower yaw relative to its leader is negative in a left turn
+# History: joint_yaw_sign = -1 was only compensating for the IR wheel mapping steering the lead the wrong way
+# (measured yaw rate was -1x commanded, so the lead steered away from its path). With that mapping fixed the
+# physical convention applies: yaw_gain < 0 already makes the follower yaw negative in a left turn.
+joint_yaw_sign = 1.0           # follower yaw relative to its leader is negative in a left turn
 wheel_speed_from_ir = true     # follower wheel speeds from the measured (IR) joint yaw and hitch kinematics
 active_path = "u_turn_180"
 v_center_mps = 1.05

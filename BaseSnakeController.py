@@ -163,7 +163,8 @@ class BaseSnakeController(ABC):
         (the IR camera yaw), matching the hitch point's velocity on both sides gives
             v_{j+1} = v_j cos(psi) - w_j L_r sin(psi)
             w_{j+1} = -(v_j sin(psi) + w_j L_r cos(psi)) / L_f
-        The lead trailer follows the pure-pursuit curvature: w_0 = v_cmd * kappa. Left wheel is faster in a left turn.
+        The lead trailer follows the pure-pursuit curvature: w_0 = v_cmd * kappa. w is counter-clockwise positive, so in a
+        left turn the RIGHT wheel is faster.
         """
         v, w = float(v_cmd), float(v_cmd) * float(kappa)
         states = [(v, w)]
@@ -181,8 +182,10 @@ class BaseSnakeController(ABC):
         half_track = 0.5 * self.cfg.track_width_m
         wheel_vels: list[float] = []
         for v_i, w_i in states:
-            wheel_vels.extend([(v_i + w_i * half_track) / self.cfg.wheel_radius_m,
-                               (v_i - w_i * half_track) / self.cfg.wheel_radius_m])
+            # w_i is CCW-positive (left turn). Both wheels spin about +y, so the RIGHT wheel is the faster one in a
+            # left turn. Wheel order is (left, right).
+            wheel_vels.extend([(v_i - w_i * half_track) / self.cfg.wheel_radius_m,
+                               (v_i + w_i * half_track) / self.cfg.wheel_radius_m])
         return wheel_vels
 
     def _store_ir(self, ir_readings: Sequence[tuple[float, float, float]] | None) -> None:

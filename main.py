@@ -242,8 +242,8 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                 )
 
             wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
-            # Controller yaws are positive for a left turn. The physical yaw of a follower relative to its leader is
-            # NEGATIVE in a left turn, so joint_yaw_sign = -1 maps controller yaws to physical hinge/ball commands.
+            # Controller yaws already carry the physical sign (yaw_gain < 0: a follower's yaw relative to its leader is
+            # negative in a left turn). joint_yaw_sign is kept only as a debugging switch (1.0 = no change).
             # Everything downstream (actuators, overlay, telemetry cmd-vs-meas) works in physical yaw.
             sgn = cfg.joint_yaw_sign
             joint_yaws = [sgn * y for y in joint_yaws]

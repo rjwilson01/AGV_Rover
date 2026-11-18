@@ -40,6 +40,9 @@ capstan_max_pull_n = 6000.0
 [controller]
 active_path = "paddock_turn"
 goal_tol_m = 0.25
+follow_ideal_path = true           # followers take curvature from the smooth planned path (at the lead's progress), not the lead's own steering history
+ref_smooth_m = 1.0                 # moving-average length of the reference curvature (m)
+ref_progress_gain = 1.5            # reference progress is limited to this x the distance the lead really travels
 lookahead_gain_s = 2.0             # lookahead = max(lookahead_dist_m, gain x speed): keeps the steering loop stable
 curv_filter_m = 0.5                # low-pass on the curvature command, in metres travelled (0 = off)
 curv_rate_limit_per_m = 0.6        # max curvature change per metre travelled (0 = off)
@@ -124,3 +127,19 @@ bias_tau_s = 10.0
 vel_noise_mps = 0.05
 outages_s = []             # e.g. [[10.0, 14.0]] = no fix from t=10 to 14 s
 seed = 2
+
+[ir_camera]
+# Simulated IR camera: relative roll/pitch/yaw of trailer j+1 in trailer j's frame. Defaults are a PERFECT sensor.
+noise_std_deg = 0.0        # Gaussian noise per axis (deg)
+latency_s = 0.0            # measurement delay (s)
+quantization_deg = 0.0     # output resolution (deg); 0 = none
+seed = 0
+
+[mass_layout]
+# Where the mass sits. (battery_z_m and slosh_pivot_z_m can also be set; unset = battery at axle height, pivot at chassis top + pendulum length.)
+battery_mass_kg = 0.0      # part of trailer_dry_mass_kg, modelled as its own block (kg)
+water_rigid_z_m = 0.06     # height of the non-sloshing water block above the chassis centre (m)
+
+[bars]
+min_engagement_m = 0.10    # build check: minimum rod-in-tube overlap at full extension (m)
+

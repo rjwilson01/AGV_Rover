@@ -1,0 +1,113 @@
+"""Regenerates the auto sections of README.md (CLI options, parameter reference, test files) from the code and TOMLs.
+
+    python make_readme.py
+
+Everything outside the <!-- BEGIN:x --> ... <!-- END:x --> markers is hand-written and is left alone.
+"""
+import re
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from cli import build_parser  # noqa: E402
+
+
+def parse_toml_docs(path: Path):
+    """-> ordered {(section, key): (value_text, comment)}; the comment is the inline one, else the comment lines above."""
+    out, section, pending = {}, "", []
+    if not path.exists():
+        return out
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line:
+            pending = []
+            continue
+        if line.startswith("#"):
+            pending.append(line.lstrip("# ").strip())
+            continue
+        m = re.match(r"^\[([\w.]+)\]$", line)
+        if m:
+            section, pending = m.group(1), []
+            continue
+        m = re.match(r"^(\w+)\s*=\s*(.*)$", line)
+        if m:
+            key, rest = m.group(1), m.group(2)
+            val, comment = rest, ""
+            if "#" in rest and not rest.lstrip().startswith(("[", '"')) or re.search(r"\s#\s", rest):
+                val, _, comment = rest.partition("#")
+            val, comment = val.strip(), comment.strip()
+            if not comment and pending:
+                comment = " ".join(pending)
+            out[(section, key)] = (val, comment)
+            pending = []
+    return out
+
+
+def short(v: str, n=46) -> str:
+    v = v.replace("|", "\\|")
+    return v if len(v) <= n else v[: n - 1] + "…"
+
+
+def cli_section() -> str:
+    p = build_parser()
+    rows = ["| Option | Description |", "|---|---|"]
+    for a in p._actions:
+        if a.dest == "help":
+            continue
+        name = ", ".join(a.option_strings) if a.option_strings else a.dest
+        if a.metavar:
+            name += f" {a.metavar}"
+        rows.append(f"| `{name}` | {(a.help or '').replace('|', '/')} |")
+    return "\n".join(rows)
+
+
+def params_section() -> str:
+    common = parse_toml_docs(HERE / "configs" / "common.toml")
+    var = parse_toml_docs(HERE / "configs" / "VariableDrawbarController.toml")
+    fix = parse_toml_docs(HERE / "configs" / "FixedDrawbarController.toml")
+    keys = list(dict.fromkeys([*common, *var, *fix]))
+    sections = list(dict.fromkeys(k[0] for k in keys))
+    out = ["Value shown = `common.toml`; the Variable / Fixed columns show a controller-specific override (blank = inherits).", ""]
+    for sec in sections:
+        out += [f"### `[{sec}]`", "", "| Key | Default | Variable | Fixed | Description |", "|---|---|---|---|---|"]
+        for (s, k) in keys:
+            if s != sec or k == "":
+                continue
+            c = common.get((s, k)); v = var.get((s, k)); f = fix.get((s, k))
+            desc = next((x[1] for x in (c, v, f) if x and x[1]), "")
+            out.append(f"| `{k}` | {short(c[0]) if c else '–'} | {short(v[0]) if v else ''} | {short(f[0]) if f else ''} | {desc.replace('|', '/')} |")
+        out.append("")
+    return "\n".join(out)
+
+
+def tests_section() -> str:
+    rows = ["| File | What it does | Overrides |", "|---|---|---|"]
+    for p in sorted((HERE / "configs" / "test").glob("*.toml")):
+        txt = p.read_text().splitlines()
+        desc = " ".join(l.lstrip("# ").strip() for l in txt if l.strip().startswith("#") and not l.strip().startswith("# ="))
+        keys = parse_toml_docs(p)
+        ov = ", ".join(f"{s}.{k}={short(v[0], 18)}" if s else f"{k}={short(v[0], 18)}" for (s, k), v in keys.items() if not (s == "test" and k in ("TestName", "name", "duration_s")))
+        name = (keys.get(("test", "TestName")) or keys.get(("test", "name")) or ("",))[0].strip('"')
+        rows.append(f"| `{p.stem}` | {(name + '. ' if name else '') + desc} | {short(ov, 140)} |")
+    return "\n".join(rows)
+
+
+SECTIONS = {"cli": cli_section, "params": params_section, "tests": tests_section}
+
+
+def main() -> None:
+    path = HERE / "README.md"
+    text = path.read_text()
+    for name, fn in SECTIONS.items():
+        pat = re.compile(rf"(<!-- BEGIN:{name} -->)(.*?)(<!-- END:{name} -->)", re.S)
+        if not pat.search(text):
+            print(f"warning: markers for '{name}' missing in README.md")
+            continue
+        text = pat.sub(lambda m: f"{m.group(1)}\n{fn()}\n{m.group(3)}", text)
+    path.write_text(text)
+    print("README.md updated")
+
+
+if __name__ == "__main__":
+    main()

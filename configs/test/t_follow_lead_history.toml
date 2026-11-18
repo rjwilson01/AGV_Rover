@@ -1,0 +1,3 @@
+# Old follower reference: replay the lead's own steering history instead of the smooth planned path (A/B).
+[controller]
+follow_ideal_path = false

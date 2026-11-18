@@ -109,6 +109,11 @@ class AGVConfig:
     show_bar_overlay: bool = False             # orange (commanded) / green (measured) bar lines drawn over the model
     bar_min_engagement_m: float = 0.10         # minimum rod-in-tube overlap at full extension (build check)
 
+    # --- Idealised reference path for the followers ---
+    follow_ideal_path: bool = True             # followers use the smooth planned path's curvature, not the lead's history
+    ref_smooth_m: float = 1.0                  # moving-average length applied to the reference curvature
+    ref_progress_gain: float = 1.5             # max reference progress per metre the lead actually travels
+
     # --- Steering smoothness ---
     lookahead_gain_s: float = 2.0              # lookahead = max(lookahead_dist_m, gain * speed)
     curv_filter_m: float = 0.5                 # curvature low-pass length (distance domain); 0 = off
@@ -358,6 +363,9 @@ def load_config(
         launch_plotjuggler=bool(sim.get("launch_plotjuggler", False)),
         show_bar_overlay=bool(v.get("show_bar_overlay", False)),
         bar_min_engagement_m=float(bars.get("min_engagement_m", 0.10)),
+        follow_ideal_path=bool(raw["controller"].get("follow_ideal_path", True)),
+        ref_smooth_m=float(raw["controller"].get("ref_smooth_m", 1.0)),
+        ref_progress_gain=float(raw["controller"].get("ref_progress_gain", 1.5)),
         lookahead_gain_s=float(raw["controller"].get("lookahead_gain_s", 2.0)),
         curv_filter_m=float(raw["controller"].get("curv_filter_m", 0.5)),
         curv_rate_limit_per_m=float(raw["controller"].get("curv_rate_limit_per_m", 0.6)),

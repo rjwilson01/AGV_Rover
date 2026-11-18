@@ -13,6 +13,9 @@ class VariableDrawbarController(BaseSnakeController):
         self.last_imu = imu_readings
         self._store_ir(ir_readings)
         v_cmd = self.cfg.v_center_mps if v_center is None else v_center
+        drive = self._drive_cmd()
+        if drive is not None:
+            v_cmd = drive[0]
         ld_cmd = self._lookahead_for(v_cmd, lookahead_dist)
         num_wheels = 2 * self.num_trailers
 
@@ -22,11 +25,14 @@ class VariableDrawbarController(BaseSnakeController):
 
         target_pt, at_goal = self._get_lookahead_point(pos_xy, ld_cmd)
         self.last_lookahead = target_pt.copy()
+        self._advance_reference()
 
-        if at_goal and (np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m or self._passed_end(pos_xy)):
+        if drive is None and at_goal and (np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m or self._passed_end(pos_xy)):
             return [0.0] * num_wheels, list(self.last_joint_yaws), list(self.last_bar_lengths)
 
-        kappa = self._shape_curvature(self._compute_pure_pursuit_curvature(pos_xy, lead_hdg_rad, target_pt))
+        kappa = drive[1] if drive is not None else self._shape_curvature(self._compute_pure_pursuit_curvature(pos_xy, lead_hdg_rad, target_pt))
+        if drive is not None:
+            self.kappa_raw = self.kappa_shaped = float(kappa)
         self.path_history.append((self.dist_traveled, kappa))
 
         r_min, r_max = self.cfg.rear_bar_range_m
@@ -39,7 +45,7 @@ class VariableDrawbarController(BaseSnakeController):
 
         for j in range(self.num_joints):
             delay_m = max(0.0, cum_dist_m + 0.5 * (r_min + r_max) - self.cfg.actuator_lead_offset_m)
-            k_j = self._lookup_curvature(delay_m)
+            k_j = self._follow_curvature(delay_m)
 
             psi_at_max = self.cfg.yaw_gain * (np.arctan(r_max * k_j) + np.arctan(f_max * k_j))
             yaw_limit = self.yaw_max_rad if psi_at_max >= 0.0 else abs(self.yaw_min_rad)
@@ -77,7 +83,7 @@ class VariableDrawbarController(BaseSnakeController):
         wheel_vels = []
         use_ir_wheels = self.cfg.wheel_speed_from_ir and ir_readings is not None
         if use_ir_wheels:
-            wheel_vels = self._ir_wheel_vels(v_cmd, kappa, bar_lengths)
+            wheel_vels = self._ir_wheel_vels(v_cmd, kappa, bar_lengths, self._ref_curvature(0.0) if self._use_ref() else None)
         for i in range(0 if use_ir_wheels else self.num_trailers):
             if i == 0:
                 psi = joint_yaws[0]

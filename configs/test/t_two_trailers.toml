@@ -1,0 +1,3 @@
+# Two-trailer train: the simplest set-up for impulse / step-response studies (use with --drive).
+[geometry]
+num_trailers = 2

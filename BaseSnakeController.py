@@ -3,7 +3,7 @@ from collections import deque
 from collections.abc import Sequence
 import importlib
 import numpy as np
-from planner import chain_curvature_limit, plan_path
+from planner import chain_curvature_limit, path_curvature, plan_path
 from config import AGVConfig
 
 PATH_HISTORY_MAX_SAMPLES = 4000
@@ -79,9 +79,64 @@ class BaseSnakeController(ABC):
         self.front_yaw_max_rad = np.deg2rad(cfg.front_bar_yaw_range_deg[1])
 
         self.path_history: deque[tuple[float, float]] = deque(maxlen=PATH_HISTORY_MAX_SAMPLES)
+        self.drive = None            # optional open-loop (v, kappa) profile for impulse/step-response testing
+        self.sim_time = 0.0
+        self._build_reference()
         self.reset()
 
+    def _build_reference(self) -> None:
+        """Idealised reference path: the smooth planned path with its curvature as a function of arc length.
+
+        Followers take their curvature from this (at the lead's smoothed progress along it) instead of replaying the
+        lead's own, wiggly, steering history.
+        """
+        self.ref_s = None
+        self.ref_kappa = None
+        if not (self.cfg.follow_ideal_path and self.plan is not None and len(self.waypoints) >= 3):
+            return
+        pts = self.waypoints
+        seg = np.linalg.norm(np.diff(pts, axis=0), axis=1)
+        s = np.concatenate([[0.0], np.cumsum(seg)])
+        kap = np.zeros(len(pts))
+        kap[1:-1] = path_curvature(pts)
+        step = float(np.median(seg)) if len(seg) else 0.05
+        n = max(1, int(round(self.cfg.ref_smooth_m / max(step, 1e-6))))
+        if n > 1:
+            kern = np.ones(n) / n
+            pad = np.pad(kap, (n // 2, n - 1 - n // 2), mode="edge")
+            kap = np.convolve(pad, kern, mode="valid")
+        self.ref_s, self.ref_kappa = s, kap
+
+    def _use_ref(self) -> bool:
+        return self.ref_kappa is not None and self.drive is None
+
+    def _advance_reference(self) -> None:
+        """Lead's progress s_ref along the ideal path: monotone and rate-limited, so a wiggling lead cannot jerk it."""
+        if self.ref_s is None:
+            return
+        ds = max(self.dist_traveled - self._ref_last_dist, 0.0)
+        self._ref_last_dist = self.dist_traveled
+        s_target = min(self.s_proj, float(self.ref_s[-1]))
+        self.s_ref = max(self.s_ref, min(s_target, self.s_ref + self.cfg.ref_progress_gain * ds + 1e-9))
+
+    def _ref_curvature(self, delay_m: float) -> float:
+        if self.ref_s is None:
+            return 0.0
+        s = self.s_ref - delay_m
+        if s <= 0.0 or s >= float(self.ref_s[-1]):
+            return 0.0                              # straight before the start / after the end
+        return float(np.interp(s, self.ref_s, self.ref_kappa))
+
+    def _follow_curvature(self, delay_m: float) -> float:
+        return self._ref_curvature(delay_m) if self._use_ref() else self._lookup_curvature(delay_m)
+
+    def _drive_cmd(self):
+        return self.drive(self.sim_time) if self.drive is not None else None
+
     def reset(self) -> None:
+        self.s_ref = 0.0
+        self.s_proj = 0.0
+        self._ref_last_dist = 0.0
         self.dist_traveled = 0.0
         self.prev_pos = None
         self.path_history.clear()
@@ -110,6 +165,8 @@ class BaseSnakeController(ABC):
         dists = np.linalg.norm(pos_xy - proj_all, axis=1)
         best_seg_idx = int(np.argmin(dists))
         best_proj = proj_all[best_seg_idx]
+        if self.ref_s is not None:
+            self.s_proj = float(self.ref_s[best_seg_idx] + t_proj[best_seg_idx] * np.sqrt(ab_len_sq[best_seg_idx]))
 
         rem = lookahead_dist
         curr_pt = best_proj
@@ -195,7 +252,7 @@ class BaseSnakeController(ABC):
         """
         ...
 
-    def _ir_wheel_vels(self, v_cmd: float, kappa: float, bar_lengths) -> list[float]:
+    def _ir_wheel_vels(self, v_cmd: float, kappa: float, bar_lengths, kappa_follow: float | None = None) -> list[float]:
         """Wheel speeds for every trailer from the hitch kinematics and the MEASURED joint yaws.
 
         Planar model: trailer j has speed v_j and yaw rate w_j; its rear hitch point is L_r behind its axle, and the
@@ -208,6 +265,8 @@ class BaseSnakeController(ABC):
         """
         v, w = float(v_cmd), float(v_cmd) * float(kappa)
         states = [(v, w)]
+        if kappa_follow is not None:
+            w = float(v_cmd) * float(kappa_follow)       # followers chain from the idealised path, not the lead's wiggle
         w_lim = 3.0
         for j in range(self.num_joints):
             psi = self.last_ir_readings[j][0]
@@ -239,6 +298,8 @@ class BaseSnakeController(ABC):
             "lead/kappa_raw": round(self.kappa_raw, 4),
             "lead/kappa_cmd": round(self.kappa_shaped, 4),
             "lead/lookahead_m": round(self.last_lookahead_m, 3),
+            "ref/s_m": round(self.s_ref, 3),
+            "ref/kappa": round(self._ref_curvature(0.0), 4),
         }
         for idx, (v_i, w_i) in enumerate(self.last_follow_states, start=1):
             metrics[f"trailer{idx}/v_cmd_mps"] = round(float(v_i), 4)

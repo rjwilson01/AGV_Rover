@@ -11,6 +11,8 @@ import mujoco.viewer
 from bar_geometry import axle_distance, ball_ypr_from_trailer_relative, trailer_cable_len
 from BaseSnakeController import calc_cable_len, create_controller, quat_to_euler
 from config import cg_above_axle_m, config_diff, load_config
+from cli import build_parser
+from drive_profile import parse_drive
 from gnss import GNSSModel
 from imu import IMUModel
 from safeguard import FollowerGuard
@@ -48,20 +50,7 @@ def _set_status(viewer, line1: str, line2: str) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Snake AGV simulation")
-    parser.add_argument("preset", nargs="?", default=None, help="controller preset, e.g. VariableDrawbarController")
-    parser.add_argument(
-        "--tests", default=None, metavar="SPEC",
-        help="test sequence, e.g. 200-a,b,c,100-d,e,100+f,g  (seconds, then - = reset to defaults / + = keep "
-             "previous files, then files in configs/test/; each group runs once its files are loaded)",
-    )
-    parser.add_argument(
-        "--set", action="append", default=[], metavar="SECTION.KEY=VALUE",
-        help="override one config value (TOML syntax); beats every test file. Repeatable.",
-    )
-    parser.add_argument("--plotjuggler", action="store_true", help="launch PlotJuggler (off by default)")
-    parser.add_argument("--selfcheck", action="store_true", help="measure the sign conventions with short open-loop moves, then exit")
-    parser.add_argument("--no-viewer", action="store_true", help="run headless, faster than real time")
+    parser = build_parser()
     # argparse treats a value starting with '-' (e.g. "--tests -200-a,b") as a new option: glue it on as --tests=VALUE
     argv = sys.argv[1:]
     for i, tok in enumerate(argv[:-1]):
@@ -97,8 +86,17 @@ def main():
         changes = config_diff(args.preset, test_files=seg.active_files, set_overrides=args.set)
         plans.append((seg, cfg, duration, changes))
 
+    if args.view:
+        from viewmodel import view_model
+        if len(plans) > 1:
+            print("[view] only the first test group is shown (one configuration at a time)")
+        return view_model(plans[0][1], args.dump_xml)
+
+    drive_fn = parse_drive(args.drive) if args.drive else None
     first_cfg = plans[0][1]
     meta = {"controller": first_cfg.controller_class}
+    if args.drive:
+        meta["drive"] = args.drive
     if args.tests:
         meta["TestName"] = "; ".join(p[1].test_name or "(defaults)" for p in plans)
         meta["test_sequence"] = args.tests
@@ -145,7 +143,7 @@ def main():
                 if changes:
                     print("    changes vs defaults: " + ", ".join(f"{k}={v}" for k, v in changes.items()), flush=True)
                 telemetry.set_segment(i, name)
-            finished = run_sim(cfg, telemetry, duration, show_viewer=not args.no_viewer, status_label=label)
+            finished = run_sim(cfg, telemetry, duration, show_viewer=not args.no_viewer, status_label=label, drive_fn=drive_fn)
             telemetry.flush_csv()
             if args.tests and finished:
                 print(f"[Test {i}/{len(plans)}] DONE   {cfg.test_name or '(defaults)'}", flush=True)
@@ -156,7 +154,7 @@ def main():
         telemetry.close()
 
 
-def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") -> bool:
+def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", drive_fn=None) -> bool:
     """Run one simulation. Returns True if it ran to duration_s, False if the viewer was closed first."""
     print(f"[Sim] Loaded controller={cfg.controller_class} | mode={cfg.drawbar_mode} | path={cfg.active_path}")
 
@@ -166,6 +164,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
 
     lead_body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trailer_1")
     controller = create_controller(cfg)
+    controller.drive = drive_fn
     ir_camera = IRCameraModel(cfg)
     imu_model = IMUModel(cfg) if cfg.imu_enabled else None
     guard = FollowerGuard(cfg)
@@ -249,6 +248,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="") 
                     [data.sensor(f"t{i}_gyro").data for i in range(1, cfg.num_trailers + 1)],
                 )
 
+            controller.sim_time = t
             wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
             # Controller yaws already carry the physical sign (yaw_gain < 0: a follower's yaw relative to its leader is
             # negative in a left turn). joint_yaw_sign is kept only as a debugging switch (1.0 = no change).

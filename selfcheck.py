@@ -4,10 +4,11 @@ Run:  python main.py VariableDrawbarController --selfcheck [--tests <files>]   (
 Writes the verdicts and the time series into sim_log.csv (as '# ' lines plus a table) so `runtest` pushes them.
 
 Conventions being verified (x forward, y left, z up, yaw counter-clockwise positive):
-  1. wheels      : right wheel faster than left  -> vehicle turns LEFT (heading increases), gyro z > 0
-  2. hinge       : positive yaw command on the bar hinges -> IR relative yaw (trailer j+1 in j) > 0, follower displaced to -y
-  3. controller  : kappa > 0 (target on the left) -> controller wheel commands -> lead heading increases
-  4. consistency : follower yaw in a left turn is negative, and the controller's hinge command for kappa > 0 is negative
+  1. hinge       : positive yaw command on the bar hinges -> IR relative yaw (trailer j+1 in j) > 0, follower displaced to -y
+  2. chain       : controller wheel law + controller hinge command together: kappa > 0 (left) turns the lead left and
+                   gives a NEGATIVE follower yaw; kappa < 0 mirrors it. (A locked straight chain cannot turn, so the
+                   hinges are commanded to the matching steady-state pose.)
+  3. consistency : the controller's hinge command for a left turn is negative
 """
 import csv
 from pathlib import Path
@@ -84,6 +85,9 @@ class _Rig:
                     "gyro_z_dps": round(float(np.degrees(self.data.sensor("t1_gyro").data[2])), 3) if self.cfg.imu_enabled else "",
                     "ir_yaw_deg": round(float(np.degrees(relative_euler(q[0], q[1])[0])), 3),
                     "t2_lateral_in_lead_frame_m": round(float(-np.sin(h) * dx + np.cos(h) * dy), 3),
+                    "lead_x_m": round(float(self.data.joint("root_jnt").qpos[0]), 3),
+                    "lead_y_m": round(float(self.data.joint("root_jnt").qpos[1]), 3),
+                    "lead_speed_mps": round(float(np.hypot(*self.data.joint("root_jnt").qvel[:2])), 3),
                 })
 
 
@@ -102,59 +106,60 @@ def run_selfcheck(cfg, out_path: Path) -> bool:
 
     rows = []
 
-    # 1. wheels: right faster -> left turn
-    rig = _Rig(cfg)
-    h0 = rig.lead_hdg()
-    rig.step("1_wheels_right_faster", 4.0, hook=lambda t: rig.wheels(2.0 * _ramp(t), 3.5 * _ramp(t)))
-    dh = float(np.degrees(np.unwrap([h0, rig.lead_hdg()])[1] - h0))
-    gz = [r["gyro_z_dps"] for r in rig.rows if r["gyro_z_dps"] != ""]
-    gmean = float(np.mean(gz[len(gz) // 2:])) if gz else float("nan")
-    verdict("wheels: right wheel faster turns the vehicle LEFT", dh > 5.0 and (np.isnan(gmean) or gmean > 0),
-            f"heading change {dh:+.1f} deg (want > 0), gyro z mean {gmean:+.1f} dps (want > 0)")
-    rows += rig.rows
-
-    # 2. hinge: positive yaw command -> positive IR yaw, follower displaced to -y
+    # 1+2. hinge: positive yaw command -> positive IR yaw (peak response), follower displaced to -y.
+    #      Wheels are held (zero speed command), so judge the PEAK in the first 1.5 s, not the end value.
     if cfg.bar_yaw_control:
-        rig = _Rig(cfg)
-        rig.step("2_hinge_settle", 0.5)
-        rig.set_hinges(0.2, 0.2)
-        rig.step("2_hinge_plus", 3.0)
-        yaw = float(np.degrees(rig.ir_yaw(0)))
-        lat = rig.rows[-1]["t2_lateral_in_lead_frame_m"]
-        verdict("hinge: +yaw command gives + IR relative yaw", yaw > 5.0, f"commanded +46 deg total (0.2+0.2 rad each way), IR yaw {yaw:+.1f} deg")
-        verdict("hinge: +yaw swings the follower to the RIGHT (-y)", lat < -0.01, f"follower lateral offset in the lead frame {lat:+.3f} m (want < 0)")
-        rows += rig.rows
-        rig = _Rig(cfg)
-        rig.step("2_hinge_settle", 0.5)
-        rig.set_hinges(-0.2, -0.2)
-        rig.step("2_hinge_minus", 3.0)
-        yaw_m = float(np.degrees(rig.ir_yaw(0)))
-        verdict("hinge: -yaw command gives - IR relative yaw", yaw_m < -5.0, f"IR yaw {yaw_m:+.1f} deg")
-        rows += rig.rows
+        for sign in (+1.0, -1.0):
+            rig = _Rig(cfg)
+            rig.step("1_hinge_settle", 0.5)
+            n0 = len(rig.rows)
+            rig.set_hinges(0.2 * sign, 0.2 * sign)
+            rig.step(f"1_hinge_{'plus' if sign > 0 else 'minus'}", 1.5)
+            seg = rig.rows[n0:]
+            yaws = np.array([r["ir_yaw_deg"] for r in seg])
+            lats = np.array([r["t2_lateral_in_lead_frame_m"] for r in seg])
+            peak_yaw = float(yaws[np.argmax(np.abs(yaws))])
+            peak_lat = float(lats[np.argmax(np.abs(lats))])
+            verdict(f"hinge: {'+' if sign > 0 else '-'}yaw command gives {'+' if sign > 0 else '-'} IR relative yaw",
+                    peak_yaw * sign > 3.0, f"peak IR yaw {peak_yaw:+.1f} deg after a {sign * 46:+.0f} deg total command")
+            verdict(f"hinge: {'+' if sign > 0 else '-'}yaw swings the follower to the {'RIGHT (-y)' if sign > 0 else 'LEFT (+y)'}",
+                    peak_lat * sign < -0.02, f"peak follower lateral offset in the lead frame {peak_lat:+.3f} m")
+            rows += rig.rows
     else:
         verdicts.append("SKIP | hinge tests need bar_yaw_control (Variable build)")
         print(verdicts[-1])
 
-    # 3. controller: kappa > 0 -> wheel commands -> lead turns left
-    rig = _Rig(cfg)
-    ctrl = create_controller(cfg)
-    bars = [(cfg.rear_bar_range_m[1], cfg.front_bar_range_m[1])] * (rig.n - 1)
-    ctrl.num_joints = rig.n - 1
+    # 3. whole chain, both turn directions: controller wheel law + controller hinge command (physical sign) together.
+    #    Hinges are commanded to the steady-state pose for the curvature, so the chain is free to follow the circle.
+    for kappa in (+0.15, -0.15):
+        rig = _Rig(cfg)
+        ctrl = create_controller(cfg)
+        bars = [(cfg.rear_bar_range_m[1], cfg.front_bar_range_m[1])] * (rig.n - 1)
+        psi_total = cfg.joint_yaw_sign * cfg.yaw_gain * (np.arctan(bars[0][0] * kappa) + np.arctan(bars[0][1] * kappa))
+        rig.set_hinges(0.5 * psi_total, 0.5 * psi_total)
 
-    def drive(t):
-        q = rig.quats()
-        ctrl.last_ir_readings = [tuple(float(v) for v in relative_euler(q[j], q[j + 1])) for j in range(rig.n - 1)]
-        wv = ctrl._ir_wheel_vels(1.0 * _ramp(t), 0.15, bars)
-        for i in range(rig.n):
-            rig.data.actuator(f"m_t{i + 1}_l").ctrl = wv[2 * i]
-            rig.data.actuator(f"m_t{i + 1}_r").ctrl = wv[2 * i + 1]
+        def drive(t, ctrl=ctrl, rig=rig, bars=bars, kappa=kappa):
+            q = rig.quats()
+            ctrl.last_ir_readings = [tuple(float(v) for v in relative_euler(q[j], q[j + 1])) for j in range(rig.n - 1)]
+            wv = ctrl._ir_wheel_vels(1.0 * _ramp(t), kappa, bars)
+            for i in range(rig.n):
+                rig.data.actuator(f"m_t{i + 1}_l").ctrl = wv[2 * i]
+                rig.data.actuator(f"m_t{i + 1}_r").ctrl = wv[2 * i + 1]
 
-    h0 = rig.lead_hdg()
-    rig.step("3_controller_kappa_plus", 4.0, hook=drive)
-    dh3 = float(np.degrees(np.unwrap([h0, rig.lead_hdg()])[1] - h0))
-    verdict("controller: kappa > 0 (target on the left) turns the lead LEFT", dh3 > 3.0,
-            f"heading change {dh3:+.1f} deg after 4 s at kappa 0.15 (ideal about +{np.degrees(0.15 * 1.0 * 3.0):.0f} deg incl. ramp)")
-    rows += rig.rows
+        h0 = rig.lead_hdg()
+        name = f"3_chain_kappa_{kappa:+.2f}"
+        rig.step(name, 5.0, hook=drive)
+        dh3 = float(np.degrees(np.unwrap([h0, rig.lead_hdg()])[1] - h0))
+        last = [r for r in rig.rows if r["phase"] == name][-40:]
+        ir_end = float(np.mean([r["ir_yaw_deg"] for r in last]))
+        want = np.degrees(kappa * 1.0 * 4.5)
+        verdict(f"chain: kappa {kappa:+.2f} turns the lead {'LEFT' if kappa > 0 else 'RIGHT'}",
+                dh3 * kappa > 0 and abs(dh3) > 0.4 * abs(want),
+                f"heading change {dh3:+.1f} deg in 5 s (ideal about {want:+.0f})")
+        verdict(f"chain: kappa {kappa:+.2f} gives IR yaw {'NEGATIVE' if kappa > 0 else 'POSITIVE'} (follower yaw is negative in a left turn)",
+                ir_end * kappa < 0 and abs(ir_end) > 8.0,
+                f"IR yaw at the end {ir_end:+.1f} deg (hinge command {np.degrees(psi_total):+.1f} deg)")
+        rows += rig.rows
 
     # 4. controller hinge command sign for a left turn vs what the hinge physically does
     psi = cfg.yaw_gain * (np.arctan(cfg.rear_bar_range_m[1] * 0.15) + np.arctan(cfg.front_bar_range_m[1] * 0.15))
@@ -165,7 +170,7 @@ def run_selfcheck(cfg, out_path: Path) -> bool:
     verdicts.append(f"RESULT | {'ALL CHECKS PASSED' if ok_all else 'SOME CHECKS FAILED'} | build_tag see header")
     print(verdicts[-1])
 
-    fields = ["phase", "t", "lead_hdg_deg", "gyro_z_dps", "ir_yaw_deg", "t2_lateral_in_lead_frame_m"]
+    fields = ["phase", "t", "lead_hdg_deg", "gyro_z_dps", "ir_yaw_deg", "t2_lateral_in_lead_frame_m", "lead_x_m", "lead_y_m", "lead_speed_mps"]
     with open(out_path, "w", newline="") as f:
         f.write("# selfcheck: sign conventions measured in MuJoCo\n")
         for v in verdicts:

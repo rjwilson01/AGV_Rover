@@ -19,7 +19,7 @@ class FixedDrawbarController(BaseSnakeController):
         target_pt, at_goal = self._get_lookahead_point(pos_xy, ld_cmd)
         self.last_lookahead = target_pt.copy()
 
-        if at_goal and np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m:
+        if at_goal and (np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m or self._passed_end(pos_xy)):
             return [0.0] * num_wheels, list(self.last_joint_yaws), list(self.last_bar_lengths)
 
         kappa = self._shape_curvature(self._compute_pure_pursuit_curvature(pos_xy, lead_hdg_rad, target_pt))

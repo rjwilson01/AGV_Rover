@@ -127,6 +127,15 @@ class BaseSnakeController(ABC):
 
         return self.waypoints[-1].copy(), True
 
+    def _passed_end(self, pos_xy) -> bool:
+        """True once the vehicle has gone past the end of the final path segment (so it stops instead of orbiting the goal)."""
+        a, e = self.waypoints[-2], self.waypoints[-1]
+        seg = e - a
+        L2 = float(np.dot(seg, seg))
+        if L2 <= NUMERIC_EPS:
+            return False
+        return float(np.dot(pos_xy - a, seg)) / L2 >= 1.0
+
     def _lookahead_for(self, v_cmd: float, requested: float | None = None) -> float:
         """Pure-pursuit lookahead grows with speed (time-based) so the steering loop stays stable despite actuator lag."""
         base = self.cfg.lookahead_dist_m if requested is None else requested

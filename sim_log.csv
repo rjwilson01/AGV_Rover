@@ -1,7 +1,7 @@
 # log_version: 1
-# git_commit: 79a5bcd
+# git_commit: 297ddf5-dirty
 # build_tag: (not set)
-# started: 2026-11-18T15:51:53
+# started: 2026-11-18T15:58:10
 # controller: VariableDrawbarController
 # TestName: Real mass layout (batt at axle, water mid) + Wheels 0.35 m, axle +0.03 (clearance 0.20) + t_planner_off; Real mass layout (batt at axle, water mid) + Wheels 0.35 m, axle +0.03 (clearance 0.20) + t_wide_uturn
 # test_sequence: 30-t_real_layout,t_w35_p03,t_planner_off,30-t_real_layout,t_w35_p03,t_wide_uturn

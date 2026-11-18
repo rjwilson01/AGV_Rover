@@ -109,6 +109,12 @@ class AGVConfig:
     show_bar_overlay: bool = False             # orange (commanded) / green (measured) bar lines drawn over the model
     bar_min_engagement_m: float = 0.10         # minimum rod-in-tube overlap at full extension (build check)
 
+    # --- Steering smoothness ---
+    lookahead_gain_s: float = 2.0              # lookahead = max(lookahead_dist_m, gain * speed)
+    curv_filter_m: float = 0.5                 # curvature low-pass length (distance domain); 0 = off
+    curv_rate_limit_per_m: float = 0.6         # max change of curvature per metre travelled (1/m^2); 0 = off
+    follower_min_speed_frac: float = 0.3       # follower speed floor as a fraction of the lead's commanded speed
+
     # --- Path planner ---
     planner_enabled: bool = True
     planner_margin: float = 0.85               # fraction of the hitch yaw range the planner may use
@@ -352,6 +358,10 @@ def load_config(
         launch_plotjuggler=bool(sim.get("launch_plotjuggler", False)),
         show_bar_overlay=bool(v.get("show_bar_overlay", False)),
         bar_min_engagement_m=float(bars.get("min_engagement_m", 0.10)),
+        lookahead_gain_s=float(raw["controller"].get("lookahead_gain_s", 2.0)),
+        curv_filter_m=float(raw["controller"].get("curv_filter_m", 0.5)),
+        curv_rate_limit_per_m=float(raw["controller"].get("curv_rate_limit_per_m", 0.6)),
+        follower_min_speed_frac=float(raw["controller"].get("follower_min_speed_frac", 0.3)),
         planner_enabled=bool(c.get("planner_enabled", True)),
         planner_margin=float(c.get("planner_margin", 0.85)),
         planner_spacing_m=float(c.get("planner_spacing_m", 0.05)),

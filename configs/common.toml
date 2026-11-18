@@ -40,6 +40,10 @@ capstan_max_pull_n = 6000.0
 [controller]
 active_path = "paddock_turn"
 goal_tol_m = 0.25
+lookahead_gain_s = 2.0             # lookahead = max(lookahead_dist_m, gain x speed): keeps the steering loop stable
+curv_filter_m = 0.5                # low-pass on the curvature command, in metres travelled (0 = off)
+curv_rate_limit_per_m = 0.6        # max curvature change per metre travelled (0 = off)
+follower_min_speed_frac = 0.3      # followers never stall below this fraction of the lead's speed
 planner_enabled = true             # Round waypoint corners with arcs and cap curvature at what the hitches can follow
 planner_margin = 0.85              # fraction of the hitch yaw range the planner may use
 planner_spacing_m = 0.05

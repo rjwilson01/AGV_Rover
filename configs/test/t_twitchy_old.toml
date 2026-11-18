@@ -1,0 +1,6 @@
+# Old steering: fixed 1.6 m lookahead, raw curvature, followers may stall. For A/B against the smoothed default.
+[controller]
+lookahead_gain_s = 0.0
+curv_filter_m = 0.0
+curv_rate_limit_per_m = 0.0
+follower_min_speed_frac = 0.0

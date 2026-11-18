@@ -85,6 +85,10 @@ class BaseSnakeController(ABC):
         self.dist_traveled = 0.0
         self.prev_pos = None
         self.path_history.clear()
+        self.kappa_raw = 0.0
+        self.kappa_shaped = 0.0
+        self._shape_last_dist = 0.0
+        self.last_lookahead_m = self.cfg.lookahead_dist_m
         self.last_lookahead = None
         self.last_joint_yaws = [0.0] * self.num_joints
         self.last_ir_readings = [(0.0, 0.0, 0.0)] * self.num_joints
@@ -122,6 +126,33 @@ class BaseSnakeController(ABC):
             idx += 1
 
         return self.waypoints[-1].copy(), True
+
+    def _lookahead_for(self, v_cmd: float, requested: float | None = None) -> float:
+        """Pure-pursuit lookahead grows with speed (time-based) so the steering loop stays stable despite actuator lag."""
+        base = self.cfg.lookahead_dist_m if requested is None else requested
+        self.last_lookahead_m = max(base, self.cfg.lookahead_gain_s * abs(v_cmd))
+        return self.last_lookahead_m
+
+    def _shape_curvature(self, kappa_raw: float) -> float:
+        """Low-pass and slew-limit the pursuit curvature in the DISTANCE domain (so it does nothing when stopped).
+
+        The bar-yaw commands are predicted from this curvature, so a twitchy value slams the hitches back and forth.
+        """
+        self.kappa_raw = float(kappa_raw)
+        ds = max(self.dist_traveled - self._shape_last_dist, 0.0)
+        self._shape_last_dist = self.dist_traveled
+        c = self.cfg
+        if ds <= 0.0:
+            return self.kappa_shaped
+        target = self.kappa_raw
+        if c.curv_filter_m > 0.0:
+            a = 1.0 - float(np.exp(-ds / c.curv_filter_m))
+            target = self.kappa_shaped + a * (self.kappa_raw - self.kappa_shaped)
+        if c.curv_rate_limit_per_m > 0.0:
+            step = c.curv_rate_limit_per_m * ds
+            target = self.kappa_shaped + float(np.clip(target - self.kappa_shaped, -step, step))
+        self.kappa_shaped = float(target)
+        return self.kappa_shaped
 
     def _lookup_curvature(self, delay_m: float) -> float:
         target_d = self.dist_traveled - delay_m
@@ -175,7 +206,7 @@ class BaseSnakeController(ABC):
             s, c = np.sin(psi), np.cos(psi)
             v_next = v * c - w * l_r * s
             w_next = -(v * s + w * l_r * c) / max(l_f, NUMERIC_EPS)
-            v = float(np.clip(v_next, 0.0, 2.0 * abs(v_cmd)))
+            v = float(np.clip(v_next, self.cfg.follower_min_speed_frac * abs(v_cmd), 2.0 * abs(v_cmd)))
             w = float(np.clip(w_next, -w_lim, w_lim))
             states.append((v, w))
         self.last_follow_states = states
@@ -195,7 +226,11 @@ class BaseSnakeController(ABC):
 
     def get_telemetry(self) -> dict[str, float]:
         """Return controller-specific telemetry channels for PlotJuggler/CSV."""
-        metrics: dict[str, float] = {}
+        metrics: dict[str, float] = {
+            "lead/kappa_raw": round(self.kappa_raw, 4),
+            "lead/kappa_cmd": round(self.kappa_shaped, 4),
+            "lead/lookahead_m": round(self.last_lookahead_m, 3),
+        }
         for idx, (v_i, w_i) in enumerate(self.last_follow_states, start=1):
             metrics[f"trailer{idx}/v_cmd_mps"] = round(float(v_i), 4)
             metrics[f"trailer{idx}/omega_cmd_rad_s"] = round(float(w_i), 4)

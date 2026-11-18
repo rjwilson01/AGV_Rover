@@ -9,7 +9,7 @@ class FixedDrawbarController(BaseSnakeController):
         self.last_imu = imu_readings
         self._store_ir(ir_readings)
         v_cmd = self.cfg.v_center_mps if v_center is None else v_center
-        ld_cmd = self.cfg.lookahead_dist_m if lookahead_dist is None else lookahead_dist
+        ld_cmd = self._lookahead_for(v_cmd, lookahead_dist)
         num_wheels = 2 * self.num_trailers
 
         if self.prev_pos is not None:
@@ -22,7 +22,7 @@ class FixedDrawbarController(BaseSnakeController):
         if at_goal and np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m:
             return [0.0] * num_wheels, list(self.last_joint_yaws), list(self.last_bar_lengths)
 
-        kappa = self._compute_pure_pursuit_curvature(pos_xy, lead_hdg_rad, target_pt)
+        kappa = self._shape_curvature(self._compute_pure_pursuit_curvature(pos_xy, lead_hdg_rad, target_pt))
         self.path_history.append((self.dist_traveled, kappa))
 
         r_bar = self.cfg.nominal_rear_bar_m

@@ -23,7 +23,7 @@ class FixedDrawbarController(BaseSnakeController):
         self.last_lookahead = target_pt.copy()
         self._advance_reference()
 
-        if drive is None and at_goal and (np.linalg.norm(target_pt - pos_xy) < self.cfg.goal_tol_m or self._passed_end(pos_xy)):
+        if drive is None and self._passed_end(pos_xy):
             return [0.0] * num_wheels, list(self.last_joint_yaws), list(self.last_bar_lengths)
 
         kappa = drive[1] if drive is not None else self._shape_curvature(self._compute_pure_pursuit_curvature(pos_xy, lead_hdg_rad, target_pt))

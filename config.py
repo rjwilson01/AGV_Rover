@@ -125,6 +125,7 @@ class AGVConfig:
     planner_margin: float = 0.85               # fraction of the hitch yaw range the planner may use
     planner_spacing_m: float = 0.05
     planner_radius_cap_m: float = 8.0
+    planner_runout_m: float = 3.0              # straight extension past the goal; the train still stops at the real goal
 
     # --- Follower stall guard ---
     guard_enabled: bool = True
@@ -374,6 +375,7 @@ def load_config(
         planner_margin=float(c.get("planner_margin", 0.85)),
         planner_spacing_m=float(c.get("planner_spacing_m", 0.05)),
         planner_radius_cap_m=float(c.get("planner_radius_cap_m", 8.0)),
+        planner_runout_m=float(c.get("planner_runout_m", 3.0)),
         guard_enabled=bool(c.get("guard_enabled", True)),
         guard_stall_ratio=float(c.get("guard_stall_ratio", 0.3)),
         guard_release_ratio=float(c.get("guard_release_ratio", 0.6)),

@@ -58,11 +58,14 @@ class BaseSnakeController(ABC):
     def __init__(self, cfg: AGVConfig):
         self.cfg = cfg
         self.waypoints = np.asarray(cfg.waypoints, dtype=float)
+        _g = self.waypoints[-1] - self.waypoints[-2]
+        self.goal_pt = self.waypoints[-1].copy()                      # the REAL end of the path (the plan adds a run-out past it)
+        self.goal_dir = _g / max(float(np.linalg.norm(_g)), 1e-9)
         self.max_curvature = cfg.max_curvature
         self.plan = None
         if cfg.planner_enabled:
             k_chain = chain_curvature_limit(cfg, cfg.planner_margin)
-            self.plan = plan_path(self.waypoints, k_chain, cfg.planner_spacing_m, cfg.planner_radius_cap_m)
+            self.plan = plan_path(self.waypoints, k_chain, cfg.planner_spacing_m, cfg.planner_radius_cap_m, cfg.planner_runout_m)
             self.waypoints = self.plan.points
             if k_chain > 0:
                 self.max_curvature = min(cfg.max_curvature, k_chain)
@@ -90,6 +93,9 @@ class BaseSnakeController(ABC):
         Followers take their curvature from this (at the lead's smoothed progress along it) instead of replaying the
         lead's own, wiggly, steering history.
         """
+        _seg = np.linalg.norm(np.diff(self.waypoints, axis=0), axis=1)
+        self.path_s = np.concatenate([[0.0], np.cumsum(_seg)])
+        self.goal_s = float(self.path_s[int(np.argmin(np.linalg.norm(self.waypoints - self.goal_pt, axis=1)))])
         self.ref_s = None
         self.ref_kappa = None
         if not (self.cfg.follow_ideal_path and self.plan is not None and len(self.waypoints) >= 3):
@@ -165,8 +171,8 @@ class BaseSnakeController(ABC):
         dists = np.linalg.norm(pos_xy - proj_all, axis=1)
         best_seg_idx = int(np.argmin(dists))
         best_proj = proj_all[best_seg_idx]
-        if self.ref_s is not None:
-            self.s_proj = float(self.ref_s[best_seg_idx] + t_proj[best_seg_idx] * np.sqrt(ab_len_sq[best_seg_idx]))
+        if True:
+            self.s_proj = float(self.path_s[best_seg_idx] + t_proj[best_seg_idx] * np.sqrt(ab_len_sq[best_seg_idx]))
 
         rem = lookahead_dist
         curr_pt = best_proj
@@ -185,13 +191,12 @@ class BaseSnakeController(ABC):
         return self.waypoints[-1].copy(), True
 
     def _passed_end(self, pos_xy) -> bool:
-        """True once the vehicle has gone past the end of the final path segment (so it stops instead of orbiting the goal)."""
-        a, e = self.waypoints[-2], self.waypoints[-1]
-        seg = e - a
-        L2 = float(np.dot(seg, seg))
-        if L2 <= NUMERIC_EPS:
-            return False
-        return float(np.dot(pos_xy - a, seg)) / L2 >= 1.0
+        """True once the vehicle has progressed to the real end of the path (arc length, so a path that ends above its
+        start, like the U-turn, is not mistaken for 'already there')."""
+        if self.s_proj >= self.goal_s - 1e-6:
+            return True
+        return self.s_proj > 0.5 * self.goal_s and \
+            float(np.linalg.norm(np.asarray(pos_xy) - self.goal_pt)) < self.cfg.goal_tol_m
 
     def _lookahead_for(self, v_cmd: float, requested: float | None = None) -> float:
         """Pure-pursuit lookahead grows with speed (time-based) so the steering loop stays stable despite actuator lag."""

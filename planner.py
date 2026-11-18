@@ -49,7 +49,7 @@ class PlanResult:
         return min(self.corner_radii) if self.corner_radii else math.inf
 
 
-def plan_path(waypoints, kappa_limit: float, spacing_m: float = 0.05, radius_cap_m: float = 8.0) -> PlanResult:
+def plan_path(waypoints, kappa_limit: float, spacing_m: float = 0.05, radius_cap_m: float = 8.0, runout_m: float = 0.0) -> PlanResult:
     wp = np.asarray(waypoints, dtype=float)
     res = PlanResult(points=wp.copy(), kappa_limit=kappa_limit)
     if len(wp) < 3:
@@ -91,6 +91,8 @@ def plan_path(waypoints, kappa_limit: float, spacing_m: float = 0.05, radius_cap
             # point on circle at heading h
             pts.append(centre + R * np.array([math.sin(h) * side, -math.cos(h) * side]))
     pts.append(wp[-1])
+    if runout_m > 0.0:                            # straight run-out so the lookahead never collapses onto the goal point
+        pts.append(wp[-1] + unit[-1] * runout_m)
     pts = np.asarray(pts)
 
     # Resample at uniform spacing along the arc length

@@ -22,7 +22,7 @@ def _git_version(base_dir: Path) -> str:
 
 
 class TelemetryManager:
-    def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False, launch_pj=True,
+    def __init__(self, base_dir: Path, udp_host="127.0.0.1", udp_port=9870, enable_csv=False, launch_pj=True, csv_name="sim_log.csv",
                  bar_yaw=False, meta=None):
         self.addr = (udp_host, udp_port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -30,7 +30,7 @@ class TelemetryManager:
         self.meta = {"log_version": 1, "git_commit": _git_version(base_dir),
                      "build_tag": os.environ.get("BUILD_TAG") or os.environ.get("buildtag") or os.environ.get("BUILDTAG") or "(not set)",
                      "started": time.strftime("%Y-%m-%dT%H:%M:%S"), **(meta or {})}
-        self.csv_path = base_dir / "sim_log.csv"   # same file every run: just overwrite it, then git push
+        self.csv_path = base_dir / csv_name   # same file every run: just overwrite it, then git push
         self.csv_rows = []
         self.last_stream = 0.0
         self.segment_idx = 0

@@ -58,6 +58,7 @@ class VariableDrawbarController(BaseSnakeController):
 
             r_cmd = r_max - tightness * (r_max - r_min)
             f_cmd = f_max - tightness * (f_max - f_min)
+            r_cmd, f_cmd = self._ground_limited_bars(j, r_cmd, f_cmd)
 
             raw_yaw = self.cfg.yaw_gain * (np.arctan(r_cmd * k_j) + np.arctan(f_cmd * k_j))
             psi_cmd = float(np.clip(raw_yaw, self.yaw_min_rad, self.yaw_max_rad))

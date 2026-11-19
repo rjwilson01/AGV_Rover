@@ -26,21 +26,33 @@ runtest VariableDrawbarController --tests 30-t_real_layout,t_w35_p03,t_wide_utur
 
 | Mode | Command | Writes |
 |---|---|---|
-| Normal run (viewer, runs until closed) | `python main.py VariableDrawbarController` | `sim_log.csv` |
-| Timed test sequence | `python main.py VariableDrawbarController --tests 30-t_real_layout,t_w35_p03` | `sim_log.csv` |
-| **Static model review** (no physics, no controller) | `python main.py VariableDrawbarController --view --tests 1-t_real_layout,t_w35_p03` | nothing (`--dump-xml FILE` writes the MJCF) |
-| **Impulse / step response** (open-loop lead) | `python main.py VariableDrawbarController --tests 15-t_real_layout,t_w35_p03,t_two_trailers,t_ideal_sensors --drive 0:3:1.0:0,3:3.5:1.0:0.25,3.5:15:1.0:0` | `sim_log.csv` |
-| **Sign-convention self-check** | `python main.py VariableDrawbarController --selfcheck --tests 1-t_real_layout,t_w35_p03` | `sim_log.csv` (verdicts as `# PASS/FAIL` lines) |
+| Normal run (viewer, runs until closed) | `python main.py VariableDrawbarController` | `sim_log.csv` (if `save_csv_log`) |
+| Timed test sequence | `python main.py VariableDrawbarController --tests 30-t_real_layout,t_w35_p03` | `sim_test_log.csv` |
+| **Manual model review** (physics on, controller off, keyboard set-points) | `python main.py VariableDrawbarController --view --tests 1-t_real_layout,t_w35_p03` | nothing (`--dump-xml FILE` writes the MJCF) |
+| **Impulse / step response** (open-loop lead) | `python main.py VariableDrawbarController --tests 15-t_real_layout,t_w35_p03,t_two_trailers,t_ideal_sensors --drive 0:3:1.0:0,3:3.5:1.0:0.25,3.5:15:1.0:0` | `sim_test_log.csv` |
+| **Sign-convention self-check** | `python main.py VariableDrawbarController --selfcheck --tests 1-t_real_layout,t_w35_p03` | `sim_test_log.csv` (verdicts as `# PASS/FAIL` lines) |
 | Headless | add `--no-viewer` | as above |
 | PlotJuggler | add `--plotjuggler` (off by default; UDP streaming is always on) | `plotjuggler.log` |
 
-There is exactly one log file, `sim_log.csv`; every run overwrites it. Its header records `git_commit`, `build_tag` (from
+There are two log files, each overwritten by every run: runs given test parameters (`--tests`, `--set`, `--drive`, `--selfcheck`) write `sim_test_log.csv`; a plain run writes `sim_log.csv`; nothing is written if `save_csv_log` is off. Its header records `git_commit`, `build_tag` (from
 `$env:BUILD_TAG`), the controller, test names and the sequence.
 
-### Static review (`--view`)
-Builds the model from the preset plus **one** set of test files (only the first group of `--tests` is used) and opens it
-with physics paused. Prints mass, CG height, wheel clearance, bar ranges and build warnings. Use it to check geometry
-(wheel size, axle height, bar packaging) before spending time on a dynamic run.
+### Manual review (`--view`)
+Builds the model from the preset plus **one** set of test files (only the first group of `--tests` is used), runs
+physics **without the controller**, and puts every actuator set-point on the keyboard. A panel in the window lists the
+hot keys and the live values: all-wheel speed, and for each hitch the yaw, ball pitch and roll, rear bar length and front
+bar length. Prints mass, CG height, wheel clearance, bar ranges and build warnings. Nothing is logged.
+
+| Key | Action |
+|---|---|
+| Left / Right | previous / next set-point |
+| Up / Down | increase / decrease the selected set-point by its step |
+| Page Up / Page Down | bigger / smaller step (x2 / x0.5) |
+| Backspace | zero the selected set-point (bars back to longest) |
+| R | reset all set-points |
+| Space | pause / resume physics (paused: model is re-posed only) |
+
+The viewer's own hot keys still work (F1 lists them); a few letters toggle viewer display flags, which is harmless.
 
 ### Impulse / step response (`--drive`)
 Replaces the lead's path following with an open-loop profile; the follower algorithm runs unchanged. Spec:
@@ -101,7 +113,7 @@ Example: `20-t_real_layout,t_w35_p03,20+t_wide_uturn`.
 | `--set SECTION.KEY=VALUE` | override one config value (TOML syntax); beats every test file. Repeatable. |
 | `--plotjuggler` | launch PlotJuggler (off by default) |
 | `--selfcheck` | measure the sign conventions with short open-loop moves, then exit |
-| `--view` | STATIC review: show the model (preset + the first --tests group) without running physics, the controller, the CSV or PlotJuggler |
+| `--view` | MANUAL review: show the model (preset + the first --tests group) with physics running and every actuator on keyboard hot keys (listed on screen); no controller, CSV or PlotJuggler |
 | `--dump-xml FILE` | with --view: also write the generated MJCF to FILE |
 | `--drive SPEC` | open-loop lead profile for impulse/step-response tests: start:end:speed:curvature,... (replaces path following; followers run their normal algorithm) |
 | `--no-viewer` | run headless, faster than real time |
@@ -175,6 +187,8 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `ref_dev_gain` | 1.0 |  |  | share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path) |
 | `ref_dev_filter_m` | 2.0 |  |  | distance low-pass on that deviation, m |
 | `ref_dev_max` | 0.35 |  |  | clip on the deviation curvature, 1/m |
+| `bar_pitch_limit` | true |  |  | Variable build: shorten the bars when hitch pitch would put a bar end on the ground |
+| `bar_ground_margin_m` | 0.06 |  |  | clearance kept under the bars, m |
 | `planner_runout_m` | 3.0 |  |  | straight extension past the goal so the lookahead never collapses onto it; the train still stops at the real goal |
 | `guard_enabled` | true |  |  | Followers stop if the lead is commanded to move but isn't (blocked/collided) |
 | `guard_stall_ratio` | 0.3 |  |  | stalled when measured lead speed < this x commanded ... |
@@ -364,6 +378,8 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* `--view` is now a manual review with keyboard hot keys and an on-screen panel (`manual.py`); test-parameter runs write `sim_test_log.csv`, plain runs `sim_log.csv`.
+* Variable build shortens the bars when hitch pitch would put a bar end on the ground (`bar_pitch_limit`, `bar_ground_margin_m`): max length = (axle height - margin) / sin|IR pitch|, never below the minimum.
 * Followers now follow the ideal path plus the lead's smoothed deviation from it (`ref_dev_gain`, `ref_dev_filter_m`, `ref_dev_max`), so a lead that cuts a corner and corrects back no longer drags the chain the wrong way (return-leg jackknife). `ref_dev_gain=0` restores the pure ideal path.
 * Return-leg fix: planned path gets a straight run-out (`planner_runout_m`, 3 m) past the goal so the lookahead and reference curvature don't collapse at the end; the train stops on arc-length progress to the real goal (not a geometric test), so the followers keep their reference until the lead actually arrives.
 * Idealised reference path for followers (`follow_ideal_path`); `--view`, `--dump-xml`, `--drive`; this README and `make_readme.py`.

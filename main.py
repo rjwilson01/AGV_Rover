@@ -65,7 +65,7 @@ def main():
         from selfcheck import run_selfcheck
         files = parse_sequence(args.tests)[-1].active_files if args.tests else ()
         cfg = load_config(args.preset, test_files=files, set_overrides=args.set)
-        ok = run_selfcheck(cfg, base_dir / "sim_log.csv")
+        ok = run_selfcheck(cfg, base_dir / "sim_test_log.csv")
         return 0 if ok else 1
 
     # ---- plan every segment up front so a typo in any test file fails before anything runs
@@ -126,6 +126,7 @@ def main():
         udp_host=first_cfg.udp_host,
         udp_port=first_cfg.udp_port,
         enable_csv=first_cfg.save_csv_log,
+        csv_name="sim_test_log.csv" if (args.tests or args.set or args.drive) else "sim_log.csv",
         launch_pj=first_cfg.launch_plotjuggler or args.plotjuggler,
         bar_yaw=first_cfg.bar_yaw_control,
         meta=meta,

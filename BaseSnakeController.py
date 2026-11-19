@@ -113,6 +113,23 @@ class BaseSnakeController(ABC):
             kap = np.convolve(pad, kern, mode="valid")
         self.ref_s, self.ref_kappa = s, kap
 
+    def _ground_limited_bars(self, j: int, r_cmd: float, f_cmd: float) -> tuple[float, float]:
+        """Shorten the bars when the hitch is pitched so far that a bar end would touch the ground.
+
+        The bars lie at about axle height h above the ground, so a bar of length L tilted by the hitch pitch theta drops
+        L*sin|theta| at its far end. Keep that drop below h minus a margin (bar_ground_margin_m); never below the minimum
+        length. Uses the IR pitch of this hitch (either sign: the end that drops depends on which trailer is higher).
+        """
+        if not self.cfg.bar_pitch_limit or j >= len(self.last_ir_readings):
+            return r_cmd, f_cmd
+        s = abs(float(np.sin(self.last_ir_readings[j][1])))
+        if s < 1e-3:
+            return r_cmd, f_cmd
+        h = self.cfg.wheel_radius_m - self.cfg.wheel_z_offset_m - self.cfg.bar_ground_margin_m
+        r_min, _ = self.cfg.rear_bar_range_m
+        f_min, _ = self.cfg.front_bar_range_m
+        return max(r_min, min(r_cmd, h / s)), max(f_min, min(f_cmd, h / s))
+
     def _use_ref(self) -> bool:
         return self.ref_kappa is not None and self.drive is None
 

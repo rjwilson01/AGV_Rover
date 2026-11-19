@@ -1,5 +1,5 @@
-"""Static model review: build the model from the preset (+ one set of test files) and look at it. No physics steps,
-no controller, no CSV, no PlotJuggler, no files written unless --dump-xml is given."""
+"""Manual model review: build the model from the preset (+ one set of test files) and drive every actuator by hand
+(see manual.py). No controller, no CSV, no PlotJuggler, no files written unless --dump-xml is given."""
 import time
 from pathlib import Path
 
@@ -8,6 +8,7 @@ import mujoco.viewer
 
 from bar_geometry import bar_packaging_warnings, pivot_x_m
 from config import cg_above_axle_m
+from manual import ManualControls
 from xml_builder import generate_mujoco_xml
 
 
@@ -30,6 +31,7 @@ def describe(cfg, model) -> list[str]:
 
 
 def view_model(cfg, dump_xml: str | None = None) -> int:
+    """Open the model with physics running and every actuator under manual (keyboard) control. Nothing is logged."""
     xml = generate_mujoco_xml(cfg)
     if dump_xml:
         Path(dump_xml).write_text(xml)
@@ -37,11 +39,29 @@ def view_model(cfg, dump_xml: str | None = None) -> int:
     model = mujoco.MjModel.from_xml_string(xml)
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
-    print("[view] STATIC review: physics is NOT running; nothing is logged or written. Close the window to exit.")
+    ctl = ManualControls(cfg)
+    actuators = {model.actuator(i).name for i in range(model.nu)}
+    print("[view] MANUAL review: physics runs, the controller does not; every set-point is on the keyboard "
+          "(listed on screen). Nothing is logged or written. Close the window to exit.")
     for line in describe(cfg, model):
         print("   " + line)
-    with mujoco.viewer.launch_passive(model, data) as viewer:
+
+    def on_key(code):
+        ctl.key(code)
+
+    with mujoco.viewer.launch_passive(model, data, key_callback=on_key) as viewer:
         while viewer.is_running():
+            t0 = time.time()
+            ctl.apply(data, actuators)
+            if ctl.paused:
+                mujoco.mj_forward(model, data)
+            else:
+                mujoco.mj_step(model, data)
+            left, right = ctl.panel()
+            try:
+                viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT, left, right))
+            except Exception:
+                pass
             viewer.sync()
-            time.sleep(0.05)
+            time.sleep(max(0.0, model.opt.timestep - (time.time() - t0)))
     return 0

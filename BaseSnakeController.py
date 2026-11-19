@@ -83,6 +83,7 @@ class BaseSnakeController(ABC):
         self.front_yaw_max_rad = np.deg2rad(cfg.front_bar_yaw_range_deg[1])
 
         self.path_history: deque[tuple[float, float]] = deque(maxlen=PATH_HISTORY_MAX_SAMPLES)
+        self.follow_override = None  # sandbox/view only: curvature every follower sees (None = normal)
         self.drive = None            # optional open-loop (v, kappa) profile for impulse/step-response testing
         self.sim_time = 0.0
         self._build_reference()
@@ -175,6 +176,8 @@ class BaseSnakeController(ABC):
         return 0.0
 
     def _follow_curvature(self, delay_m: float) -> float:
+        if self.follow_override is not None:
+            return float(self.follow_override)
         if not self._use_ref():
             return self._lookup_curvature(delay_m)
         k = self._ref_curvature(delay_m) + self.cfg.ref_dev_gain * self._lookup_dev(delay_m)

@@ -37,32 +37,31 @@ runtest VariableDrawbarController --tests 30-t_real_layout,t_w35_p03,t_wide_utur
 There are two log files, each overwritten by every run: runs given test parameters (`--tests`, `--set`, `--drive`, `--selfcheck`) write `sim_test_log.csv`; a plain run writes `sim_log.csv`; nothing is written if `save_csv_log` is off. Its header records `git_commit`, `build_tag` (from
 `$env:BUILD_TAG`), the controller, test names and the sequence.
 
-### Manual review (`--view`)
-Builds the model from the preset plus **one** set of test files (only the first group of `--tests` is used), runs
-physics **without the controller**, and puts every actuator set-point on the keyboard. A panel in the window lists the
-hot keys and the live values: all-wheel speed, and for each hitch the yaw, ball pitch and roll, rear bar length and front
-bar length. Prints mass, CG height, wheel clearance, bar ranges and build warnings. Nothing is logged.
+### Manual sandbox (`--view`)
+Builds the model from the preset plus **one** set of test files (only the first group of `--tests` is used) and runs physics
+with the **real controller in the loop on manual inputs**. A pop-out Tk window (falls back to an on-screen panel if Tk is not
+available) has:
 
-| Key | Action |
-|---|---|
-| Left / Right | previous / next set-point |
-| Up / Down | increase / decrease the selected set-point by its step |
-| Page Up / Page Down | bigger / smaller step (x2 / x0.5) |
-| Backspace | zero the selected set-point (bars back to longest) |
-| R | reset all set-points |
-| Space | pause / resume physics (paused: model is re-posed only) |
+* a **checkbox per algorithm** (wheel law, bar-length law, tube-yaw law, pitch limit, tube geometry in the wheel law, measured vs
+  commanded cables, ball pitch/roll hold): checked = the controller's output is used, unchecked = your set-point;
+* **set-points** with -/+ buttons and keys (held keys and held buttons repeat): lead speed, lead curvature, the curvature the followers
+  see, an all-wheel speed (for wheel law off), and per hitch the yaw, ball pitch/roll, rear and front bar length;
+* a **live readout**: IR hitch angle, bar and tube yaw commanded vs measured, cable commanded vs actual length, wheel commands and the
+  follower law's (v, w).
 
-View-only model options (they change the model built for `--view`, never a test run):
+Keys in the window: Left/Right select, Up/Down (or +/-) change, PgUp/PgDn step size, Backspace zero, R reset, Space pause physics.
+Default is `--base fixed` (the lead is welded to the world; wheels spin in the air or drive against the hitches).
+The wheel law only gives different left/right speeds when the lead has a speed: its correction scales with `v`.
+See `docs/ALGORITHMS.md` and `docs/architecture.drawio` for what each stage does.
 
 | Option | Effect |
 |---|---|
-| `--base fixed` | no root joint: the lead trailer is welded to the world, so only the hitches, bars and cables move (test the hinge/bar/cable actuators in isolation) |
+| `--base fixed` (default) | no root joint: the lead trailer is welded to the world, so only the hitches, bars, cables and wheels move |
 | `--base planar` | the lead can slide in x and y only (no rotation or lifting) |
+| `--base free` | normal free vehicle |
 | `--no-friction` | floor friction 0 **and** `condim=1` on every geom. MuJoCo uses the larger friction of the two geoms in contact, so zeroing the floor alone would not be enough |
 
-Example: `python main.py VariableDrawbarController --view --base fixed --no-friction --tests 1-t_real_layout,t_w35_p03`
-
-The viewer's own hot keys still work (F1 lists them); a few letters toggle viewer display flags, which is harmless.
+Example: `python main.py VariableDrawbarController --view --no-friction --tests 1-t_real_layout,t_w35_p03`
 
 ### Impulse / step response (`--drive`)
 Replaces the lead's path following with an open-loop profile; the follower algorithm runs unchanged. Spec:
@@ -124,7 +123,7 @@ Example: `20-t_real_layout,t_w35_p03,20+t_wide_uturn`.
 | `--plotjuggler` | launch PlotJuggler (off by default) |
 | `--selfcheck` | measure the sign conventions with short open-loop moves, then exit |
 | `--view` | MANUAL review: show the model (preset + the first --tests group) with physics running and every actuator on keyboard hot keys (listed on screen); no controller, CSV or PlotJuggler |
-| `--base` | with --view: 'fixed' welds the lead trailer to the world (only hitches/bars move), 'planar' lets it slide in x and y only, 'free' is normal |
+| `--base` | with --view (default fixed): 'fixed' welds the lead trailer to the world (only hitches/bars/wheels move), 'planar' lets it slide in x and y only, 'free' is normal |
 | `--no-friction` | with --view: frictionless floor (floor friction 0 and condim=1 on all geoms) |
 | `--dump-xml FILE` | with --view: also write the generated MJCF to FILE |
 | `--drive SPEC` | open-loop lead profile for impulse/step-response tests: start:end:speed:curvature,... (replaces path following; followers run their normal algorithm) |
@@ -395,6 +394,8 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* `--view` is now a sandbox: the real controller runs on manual inputs, each algorithm has an on/off switch, pop-out Tk window with key/button repeat and a commanded-vs-measured readout (`sandbox.py`, `tkpanel.py`, `manual.py`); default `--base fixed`.
+* Wheels carry a white cross so rotation is visible. `docs/ALGORITHMS.md` and `docs/architecture.drawio` (`make_diagram.py`) describe the algorithms.
 * Follower wheel speeds now use the true hitch geometry of the yaw-tube build (`wheel_use_tube_geometry`): the ball is off the trailer axis when a tube is yawed, so the velocity-matching recursion uses its position from the tube yaws and bar lengths (reduces to the old law at zero tube yaw; verified against the rigid-body geometry).
 * Hitch cables follow the MEASURED telescoping-bar lengths as well as the measured tube yaws (`cable_use_measured_tubes`), in the controller run and in `--view`.
 * Return-leg experiment test files: `t_slow_unwind`, `t_old_cables`, `t_no_dev`.

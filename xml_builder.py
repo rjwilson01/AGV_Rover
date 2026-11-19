@@ -9,6 +9,16 @@ SITE_CORNERS = (
 )
 
 
+
+def wheel_marks_xml(cfg) -> list[str]:
+    """Contrasting cross on each wheel face (two thin bars, a little proud of the tyre) so rotation can be seen."""
+    r, hw = 0.92 * cfg.wheel_radius_m, cfg.wheel_half_width_m + 0.004
+    return [
+        f'<geom type="box" size="{r:.3f} {hw:.3f} 0.012" contype="0" conaffinity="0" mass="0.001" material="wheel_mark"/>',
+        f'<geom type="box" size="0.012 {hw:.3f} {r:.3f}" contype="0" conaffinity="0" mass="0.001" material="wheel_mark"/>',
+    ]
+
+
 def _battery_xml(idx: int, cfg: AGVConfig, indent: str) -> str:
     """Battery pack as its own (non-colliding) mass block, so its height is part of the cart's CG."""
     if cfg.battery_mass_kg <= 0.0:
@@ -131,6 +141,8 @@ def _build_trailer_body(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
             f'{b_ind}\t\t<geom type="cylinder" size="{cfg.wheel_radius_m:.3f} {cfg.wheel_half_width_m:.3f}" '
             f'euler="90 0 0" mass="{cfg.wheel_mass_kg:.1f}" material="tire"/>'
         )
+        for mark in wheel_marks_xml(cfg):
+            lines.append(f'{b_ind}\t\t{mark}')
         lines.append(f'{b_ind}\t</body>')
 
     # Rear drawbar + sites + nested next trailer
@@ -252,6 +264,8 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
         add(lv + 1, f'<joint name="j_t{idx}_{side}" type="hinge" axis="0 1 0"/>')
         add(lv + 1, f'<geom type="cylinder" size="{cfg.wheel_radius_m:.3f} {cfg.wheel_half_width_m:.3f}" '
                     f'euler="90 0 0" mass="{cfg.wheel_mass_kg:.1f}" material="tire"/>')
+        for mark in wheel_marks_xml(cfg):
+            add(lv + 1, mark)
         add(lv, '</body>')
 
     if not is_last:
@@ -359,7 +373,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 \t\t<material name="chassis_lead" rgba="0.20 0.40 0.65 1"/>
 \t\t<material name="chassis_trl" rgba="0.25 0.55 0.35 1"/>
 \t\t<material name="drawbar" rgba="0.35 0.35 0.38 1"/>
-\t\t<material name="tire" rgba="0.12 0.12 0.14 1"/>
+\t\t<material name="tire" rgba="0.12 0.12 0.14 1"/>\n\t\t<material name="wheel_mark" rgba="0.95 0.95 0.95 1"/>
 \t\t<material name="cable_mat" rgba="0.90 0.25 0.15 1"/>
 \t</asset>
 \t<worldbody>

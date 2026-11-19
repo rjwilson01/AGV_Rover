@@ -19,9 +19,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--view", action="store_true",
                         help="MANUAL review: show the model (preset + the first --tests group) with physics running and every actuator "
                              "on keyboard hot keys (listed on screen); no controller, CSV or PlotJuggler")
-    parser.add_argument("--base", choices=("free", "fixed", "planar"), default="free",
-                        help="with --view: 'fixed' welds the lead trailer to the world (only hitches/bars move), "
-                             "'planar' lets it slide in x and y only, 'free' is normal")
+    parser.add_argument("--base", choices=("free", "fixed", "planar"), default="fixed",
+                        help="with --view (default fixed): 'fixed' welds the lead trailer to the world (only hitches/bars/wheels "
+                             "move), 'planar' lets it slide in x and y only, 'free' is normal")
     parser.add_argument("--no-friction", action="store_true",
                         help="with --view: frictionless floor (floor friction 0 and condim=1 on all geoms)")
     parser.add_argument("--dump-xml", default=None, metavar="FILE", help="with --view: also write the generated MJCF to FILE")

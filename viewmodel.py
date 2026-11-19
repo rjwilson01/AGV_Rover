@@ -8,7 +8,7 @@ import mujoco.viewer
 
 from bar_geometry import bar_packaging_warnings, pivot_x_m
 from config import cg_above_axle_m
-from manual import ManualControls
+from sandbox import Sandbox
 from xml_builder import generate_mujoco_xml
 
 
@@ -59,8 +59,9 @@ def describe(cfg, model) -> list[str]:
     return lines
 
 
-def view_model(cfg, dump_xml: str | None = None, base: str = "free", frictionless: bool = False) -> int:
-    """Open the model with physics running and every actuator under manual (keyboard) control. Nothing is logged."""
+def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionless: bool = False) -> int:
+    """Open the model with physics running, the REAL controller in the loop on manual inputs, and a pop-out Tk window
+    with a switch per algorithm, the set-points, and live commanded-vs-measured values. Nothing is logged."""
     xml = apply_view_options(generate_mujoco_xml(cfg), base, frictionless)
     if dump_xml:
         Path(dump_xml).write_text(xml)
@@ -68,13 +69,20 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "free", frictionles
     model = mujoco.MjModel.from_xml_string(xml)
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
+    sb = Sandbox(cfg, model, data)
+    ctl = sb.ctl
+    print("[view] MANUAL sandbox: physics runs with the real controller on your inputs; switch each algorithm on/off and "
+          "set the inputs in the pop-out window (or with the keys). Nothing is logged or written.")
     print(f"[view] base={base} | floor {'FRICTIONLESS' if frictionless else 'normal friction'}")
-    ctl = ManualControls(cfg)
-    actuators = {model.actuator(i).name for i in range(model.nu)}
-    print("[view] MANUAL review: physics runs, the controller does not; every set-point is on the keyboard "
-          "(listed on screen). Nothing is logged or written. Close the window to exit.")
     for line in describe(cfg, model):
         print("   " + line)
+
+    win = None
+    try:
+        from tkpanel import ControlWindow
+        win = ControlWindow(ctl)
+    except Exception as exc:                                    # no Tk (or no display): use the viewer overlay instead
+        print(f"[view] pop-out window unavailable ({exc}); using the on-screen panel in the viewer")
 
     def on_key(code):
         ctl.key(code)
@@ -82,14 +90,21 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "free", frictionles
     with mujoco.viewer.launch_passive(model, data, key_callback=on_key) as viewer:
         while viewer.is_running():
             t0 = time.time()
-            ctl.apply(data, actuators)
+            sb.step()
             if ctl.paused:
                 mujoco.mj_forward(model, data)
             else:
                 mujoco.mj_step(model, data)
-            left, right = ctl.panel()
+            if win is not None and not win.update():
+                win = None                                       # closed by the user: carry on with the viewer panel
             try:
-                viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT, left, right))
+                if win is None:
+                    left, right = ctl.panel()
+                    viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT, left, right))
+                    viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_BOTTOMLEFT, ctl.readout, ""))
+                else:
+                    viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
+                                      "controls are in the pop-out window" + ("  [PHYSICS PAUSED]" if ctl.paused else ""), ""))
             except Exception:
                 pass
             viewer.sync()

@@ -1,16 +1,22 @@
-"""Manual set-points for --view: every actuator the controller normally drives can be set by hand from the keyboard.
+"""State for the --view sandbox: set-points, algorithm switches, key handling and the text panel.
 
-Kept free of viewer code so it can be tested without a window: ManualControls holds the set-points, handles key codes
-(GLFW codes, as passed to mujoco.viewer's key_callback), writes the actuator controls, and renders the help panel text.
+No viewer / physics / Tk code here, so it can be tested without a window. The physics side is in sandbox.py and the
+pop-out window in tkpanel.py.
 
-Hot keys (also listed on screen in the viewer):
-    Left / Right   previous / next set-point
-    Up / Down      increase / decrease the selected set-point by its step
-    Page Up / Down bigger / smaller step (x2 / x0.5)
-    Backspace      zero the selected set-point (bars back to their longest)
-    R              reset ALL set-points
-    Space          pause / resume physics (paused: the model is only re-posed, actuators do nothing)
-The viewer has its own hot keys too (F1 shows them); a few letters toggle viewer display flags, which is harmless.
+SET-POINTS are numbers you control. ALGORITHM SWITCHES decide, for each stage of the real controller, whether the
+controller's own output is used (ON) or your manual set-point (OFF):
+
+    wheel_law      ON: lead wheels from lead speed + curvature, follower wheels from the hitch kinematics + measured
+                       hitch yaw (the real follower law).   OFF: every wheel at the manual 'all wheels speed'.
+    bar_len_law    ON: bar lengths from the Variable controller (tightness law, driven by the curvature the followers see).
+                   OFF: manual rear/front bar length set-points.
+    bar_yaw_law    ON: tube yaw from the controller's feed-forward (arctan(length * curvature)).
+                   OFF: the manual hitch-yaw set-point (split between the two tubes, ball takes the rest).
+    pitch_limit    ON: bars shorten when the hitch pitch would put a bar end on the ground.
+    tube_geometry  ON: follower wheel law uses the ball's true off-axis position from the tube yaws.
+    cable_measured ON: cables sized for the MEASURED tube yaws and bar lengths.  OFF: for the commanded ones.
+    ball_hold_ir   ON: ball pitch/roll is held at the value measured by the IR camera (ignores manual pitch/roll).
+                   OFF: the manual ball pitch/roll set-points are used.
 """
 from __future__ import annotations
 
@@ -18,16 +24,21 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from bar_geometry import trailer_cable_len
-from BaseSnakeController import calc_cable_len
-
-# GLFW key codes
+# GLFW key codes (MuJoCo viewer) -- the Tk window maps its own keysyms onto these
 KEY_SPACE, KEY_R, KEY_BACKSPACE = 32, 82, 259
 KEY_RIGHT, KEY_LEFT, KEY_DOWN, KEY_UP = 262, 263, 264, 265
 KEY_PAGE_UP, KEY_PAGE_DOWN = 266, 267
 
-# Same corner order the controller uses for the four cables of a hitch: (name, y sign, z sign)
-CORNER_SIGNS = (("tl", 1.0, 1.0), ("tr", -1.0, 1.0), ("bl", 1.0, -1.0), ("br", -1.0, -1.0))   # same as main.py
+# (name, default, label, cfg field it toggles or None)
+FLAGS = (
+    ("wheel_law", True, "Wheel-speed law (follower speeds from hitch kinematics)", None),
+    ("bar_len_law", True, "Bar-length law (tightness from curvature)", None),
+    ("bar_yaw_law", False, "Tube-yaw law (feed-forward from curvature)", None),
+    ("pitch_limit", True, "Pitch limit (shorten bars near the ground)", "bar_pitch_limit"),
+    ("tube_geometry", True, "Wheel law uses tube/ball geometry", "wheel_use_tube_geometry"),
+    ("cable_measured", True, "Cables sized for MEASURED tubes/bars", "cable_use_measured_tubes"),
+    ("ball_hold_ir", False, "Ball pitch/roll held by IR (off: manual)", "use_ir_camera_feedback"),
+)
 
 
 @dataclass
@@ -53,18 +64,29 @@ class ManualControls:
         self.paused = False
         self.params: list[Param] = []
         self.sel = 0
+        self.flags = {name: default for name, default, _, _ in FLAGS}
+        for name, _, _, field in FLAGS:                      # a flag that mirrors a config field starts from the config
+            if field is not None and hasattr(cfg, field):
+                self.flags[name] = bool(getattr(cfg, field)) if name != "ball_hold_ir" else False
         yl, yh = cfg.yaw_angle_range_deg
         r_min, r_max = cfg.rear_bar_range_m
         f_min, f_max = cfg.front_bar_range_m
-        self.params.append(Param("wheel_speed", "all wheels speed", "m/s", 0.0, 0.0, -3.0, 3.0, 0.05))
+        kmax = float(cfg.max_curvature)
+        self.params += [
+            Param("lead_speed", "lead speed", "m/s", 0.2, 0.2, -2.0, 2.0, 0.05),
+            Param("lead_kappa", "lead curvature", "1/m", 0.0, 0.0, -kmax, kmax, 0.02),
+            Param("follow_kappa", "curvature the followers see", "1/m", 0.0, 0.0, -kmax, kmax, 0.02),
+            Param("wheel_speed", "all wheels speed (wheel law OFF)", "m/s", 0.0, 0.0, -3.0, 3.0, 0.05),
+        ]
         for j in range(1, cfg.num_trailers):
             self.params += [
-                Param(f"h{j}_yaw", f"hitch {j} yaw", "deg", 0.0, 0.0, float(yl), float(yh), 1.0),
+                Param(f"h{j}_yaw", f"hitch {j} yaw (yaw law OFF)", "deg", 0.0, 0.0, float(yl), float(yh), 1.0),
                 Param(f"h{j}_pitch", f"hitch {j} ball pitch", "deg", 0.0, 0.0, -30.0, 30.0, 1.0),
                 Param(f"h{j}_roll", f"hitch {j} ball roll", "deg", 0.0, 0.0, -30.0, 30.0, 1.0),
-                Param(f"h{j}_rear", f"hitch {j} rear bar length", "m", r_max, r_max, r_min, r_max, 0.02),
-                Param(f"h{j}_front", f"hitch {j} front bar length", "m", f_max, f_max, f_min, f_max, 0.02),
+                Param(f"h{j}_rear", f"hitch {j} rear bar (len law OFF)", "m", r_max, r_max, r_min, r_max, 0.02),
+                Param(f"h{j}_front", f"hitch {j} front bar (len law OFF)", "m", f_max, f_max, f_min, f_max, 0.02),
             ]
+        self.readout = ""        # filled by the sandbox each frame: commanded vs measured values
 
     # -- values ---------------------------------------------------------------------------------------------------
     def get(self, key: str) -> float:
@@ -73,6 +95,14 @@ class ManualControls:
     def reset_all(self) -> None:
         for p in self.params:
             p.value = p.default
+
+    def toggle(self, name: str) -> bool:
+        self.flags[name] = not self.flags[name]
+        return self.flags[name]
+
+    def cfg_overrides(self) -> dict:
+        """Config fields implied by the switches (applied by the sandbox with dataclasses.replace)."""
+        return {field: self.flags[name] for name, _, _, field in FLAGS if field is not None}
 
     # -- keys -----------------------------------------------------------------------------------------------------
     def key(self, code: int) -> bool:
@@ -100,68 +130,21 @@ class ManualControls:
             return False
         return True
 
-    # -- actuators ------------------------------------------------------------------------------------------------
-    def apply(self, data, model_actuators: set[str]) -> None:
-        """Write the set-points to the actuators, mirroring what main.py does from the controller's outputs."""
-        cfg = self.cfg
-        _, r_max = cfg.rear_bar_range_m
-        _, f_max = cfg.front_bar_range_m
-        v = self.get("wheel_speed") / cfg.wheel_radius_m
-        for i in range(1, cfg.num_trailers + 1):
-            for side in ("l", "r"):
-                data.actuator(f"m_t{i}_{side}").ctrl = v
-        rad = np.deg2rad
-        for j in range(1, cfg.num_trailers):
-            y = rad(self.get(f"h{j}_yaw"))
-            p = rad(self.get(f"h{j}_pitch"))
-            r = rad(self.get(f"h{j}_roll"))
-            r_len, f_len = self.get(f"h{j}_rear"), self.get(f"h{j}_front")
-            rear_act, front_act = f"act_slide_rear_{j}", f"act_slide_front_{j + 1}"
-            if rear_act in model_actuators:
-                data.actuator(rear_act).ctrl = r_max - r_len
-            if front_act in model_actuators:
-                data.actuator(front_act).ctrl = f_max - f_len
-            if self.bars:
-                # tubes take half the yaw each (inside their own ranges); the ball takes the rest
-                psi_r = float(np.clip(y / 2.0, rad(cfg.rear_bar_yaw_range_deg[0]), rad(cfg.rear_bar_yaw_range_deg[1])))
-                psi_f = float(np.clip(y / 2.0, rad(cfg.front_bar_yaw_range_deg[0]), rad(cfg.front_bar_yaw_range_deg[1])))
-                data.actuator(f"act_yaw_rear_{j}").ctrl = psi_r
-                data.actuator(f"act_yaw_front_{j + 1}").ctrl = psi_f
-                psi_r_c, psi_f_c, r_c, f_c = psi_r, psi_f, r_len, f_len
-                if cfg.cable_use_measured_tubes:     # cables follow where the tubes and bars ARE (as in main.py)
-                    psi_r_c = float(data.joint(f"yaw_rear_{j}").qpos.item())
-                    psi_f_c = float(data.joint(f"yaw_front_{j + 1}").qpos.item())
-                    if rear_act in model_actuators:
-                        r_c = r_max - float(data.joint(f"slide_rear_{j}").qpos.item())
-                    if front_act in model_actuators:
-                        f_c = f_max - float(data.joint(f"slide_front_{j + 1}").qpos.item())
-                y_ball = y - psi_r_c - psi_f_c
-                for k, (code, ys, zs) in enumerate(CORNER_SIGNS):
-                    data.actuator(f"cap_t{j}_t{j + 1}_{code}").ctrl = (
-                        trailer_cable_len(psi_r_c, psi_f_c, (y_ball, p, r), ys, zs, cfg, r_c, f_c)
-                        - cfg.cable_preload_offset_m
-                    )
-            else:
-                for k, (code, ys, zs) in enumerate(CORNER_SIGNS):
-                    data.actuator(f"cap_t{j}_t{j + 1}_{code}").ctrl = (
-                        calc_cable_len(-y, -p, r, ys, zs, cfg, rear_bar_m=r_len, front_bar_m=f_len)
-                        - cfg.cable_preload_offset_m
-                    )
-
-    # -- on-screen text -------------------------------------------------------------------------------------------
+    # -- on-screen text (viewer overlay; the Tk window shows the same information as widgets) ----------------------
     def panel(self) -> tuple[str, str]:
-        """(left column, right column) text for the viewer overlay."""
         head = [
-            "MANUAL CONTROLS" + ("   [PHYSICS PAUSED]" if self.paused else ""),
-            "Left/Right  select set-point",
-            "Up/Down     increase / decrease",
-            "PgUp/PgDn   bigger / smaller step",
-            "Backspace   zero selected    R  reset all",
-            "Space       pause / resume physics",
+            "MANUAL SANDBOX" + ("   [PHYSICS PAUSED]" if self.paused else ""),
+            "Left/Right select | Up/Down +/- | PgUp/PgDn step | Backspace zero | R reset | Space pause",
+            "(the pop-out window has the same controls plus switches for each algorithm)",
             "",
         ]
         left = list(head)
         right = [""] * len(head)
+        for name, _, label, _ in FLAGS:
+            left.append(f"[{'x' if self.flags[name] else ' '}] {label}")
+            right.append("")
+        left.append("")
+        right.append("")
         for i, p in enumerate(self.params):
             left.append(("> " if i == self.sel else "  ") + p.label)
             right.append(f"{p.value:+8.2f} {p.unit}  (step {p.step * p.scale:g}, {p.lo:g}..{p.hi:g})")

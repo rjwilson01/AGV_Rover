@@ -90,7 +90,7 @@ def main():
         from viewmodel import view_model
         if len(plans) > 1:
             print("[view] only the first test group is shown (one configuration at a time)")
-        return view_model(plans[0][1], args.dump_xml)
+        return view_model(plans[0][1], args.dump_xml, args.base, args.no_friction)
 
     drive_fn = parse_drive(args.drive) if args.drive else None
     first_cfg = plans[0][1]

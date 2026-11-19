@@ -12,6 +12,35 @@ from manual import ManualControls
 from xml_builder import generate_mujoco_xml
 
 
+BASE_MODES = ("free", "fixed", "planar")
+
+
+def apply_view_options(xml: str, base: str = "free", frictionless: bool = False) -> str:
+    """Tweak the generated MJCF for hand testing (view mode only).
+
+    base: 'free'   - the lead trailer is free (normal);
+          'fixed'  - no root joint, so the lead is welded to the world and only the hitches/bars move;
+          'planar' - two slide joints (x, y): the lead can translate over the ground but not rotate or lift.
+    frictionless: floor friction 0 and condim=1 on every geom. (MuJoCo uses the larger friction of the two geoms in
+          contact, so zeroing the floor alone is not enough: condim=1 removes all tangential contact force.)
+    """
+    if base not in BASE_MODES:
+        raise ValueError(f"base must be one of {BASE_MODES}, got {base!r}")
+    root = '<freejoint name="root_jnt"/>'
+    if base != "free":
+        if root not in xml:
+            raise ValueError("no root freejoint found in the generated model")
+        repl = "" if base == "fixed" else (
+            '<joint name="root_x" type="slide" axis="1 0 0"/><joint name="root_y" type="slide" axis="0 1 0"/>')
+        xml = xml.replace(root, repl, 1)
+    if frictionless:
+        xml = xml.replace('friction="0.85 0.005 0.0005"', 'friction="0 0 0"')
+        i = xml.index("<option ")
+        j = xml.index("/>", i) + 2
+        xml = xml[:j] + '\n\t<default><geom condim="1"/></default>' + xml[j:]
+    return xml
+
+
 def describe(cfg, model) -> list[str]:
     mass = [float(model.body(i).mass[0]) if hasattr(model.body(i).mass, "__len__") else float(model.body(i).mass)
             for i in range(model.nbody)]
@@ -30,15 +59,16 @@ def describe(cfg, model) -> list[str]:
     return lines
 
 
-def view_model(cfg, dump_xml: str | None = None) -> int:
+def view_model(cfg, dump_xml: str | None = None, base: str = "free", frictionless: bool = False) -> int:
     """Open the model with physics running and every actuator under manual (keyboard) control. Nothing is logged."""
-    xml = generate_mujoco_xml(cfg)
+    xml = apply_view_options(generate_mujoco_xml(cfg), base, frictionless)
     if dump_xml:
         Path(dump_xml).write_text(xml)
         print(f"[view] wrote {dump_xml}")
     model = mujoco.MjModel.from_xml_string(xml)
     data = mujoco.MjData(model)
     mujoco.mj_forward(model, data)
+    print(f"[view] base={base} | floor {'FRICTIONLESS' if frictionless else 'normal friction'}")
     ctl = ManualControls(cfg)
     actuators = {model.actuator(i).name for i in range(model.nu)}
     print("[view] MANUAL review: physics runs, the controller does not; every set-point is on the keyboard "

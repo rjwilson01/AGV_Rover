@@ -52,6 +52,16 @@ bar length. Prints mass, CG height, wheel clearance, bar ranges and build warnin
 | R | reset all set-points |
 | Space | pause / resume physics (paused: model is re-posed only) |
 
+View-only model options (they change the model built for `--view`, never a test run):
+
+| Option | Effect |
+|---|---|
+| `--base fixed` | no root joint: the lead trailer is welded to the world, so only the hitches, bars and cables move (test the hinge/bar/cable actuators in isolation) |
+| `--base planar` | the lead can slide in x and y only (no rotation or lifting) |
+| `--no-friction` | floor friction 0 **and** `condim=1` on every geom. MuJoCo uses the larger friction of the two geoms in contact, so zeroing the floor alone would not be enough |
+
+Example: `python main.py VariableDrawbarController --view --base fixed --no-friction --tests 1-t_real_layout,t_w35_p03`
+
 The viewer's own hot keys still work (F1 lists them); a few letters toggle viewer display flags, which is harmless.
 
 ### Impulse / step response (`--drive`)
@@ -114,6 +124,8 @@ Example: `20-t_real_layout,t_w35_p03,20+t_wide_uturn`.
 | `--plotjuggler` | launch PlotJuggler (off by default) |
 | `--selfcheck` | measure the sign conventions with short open-loop moves, then exit |
 | `--view` | MANUAL review: show the model (preset + the first --tests group) with physics running and every actuator on keyboard hot keys (listed on screen); no controller, CSV or PlotJuggler |
+| `--base` | with --view: 'fixed' welds the lead trailer to the world (only hitches/bars move), 'planar' lets it slide in x and y only, 'free' is normal |
+| `--no-friction` | with --view: frictionless floor (floor friction 0 and condim=1 on all geoms) |
 | `--dump-xml FILE` | with --view: also write the generated MJCF to FILE |
 | `--drive SPEC` | open-loop lead profile for impulse/step-response tests: start:end:speed:curvature,... (replaces path following; followers run their normal algorithm) |
 | `--no-viewer` | run headless, faster than real time |
@@ -379,6 +391,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* `--view --base free|fixed|planar` and `--view --no-friction` for hand-testing the hitches with the lead pinned and/or a frictionless floor.
 * Hitch cables are sized for the MEASURED tube angles (`cable_use_measured_tubes`, default on) so a lagging tube no longer makes the cables fight it and swing the passive ball (ball yaw reached -52 deg on the return leg). `false` restores the old behaviour.
 * `--view` is now a manual review with keyboard hot keys and an on-screen panel (`manual.py`); test-parameter runs write `sim_test_log.csv`, plain runs `sim_log.csv`.
 * Variable build shortens the bars when hitch pitch would put a bar end on the ground (`bar_pitch_limit`, `bar_ground_margin_m`): max length = (axle height - margin) / sin|IR pitch|, never below the minimum.

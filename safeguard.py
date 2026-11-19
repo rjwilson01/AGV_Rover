@@ -39,3 +39,57 @@ class FollowerGuard:
         step = dt / self.ramp_s if self.ramp_s > 0 else 1.0
         self.scale = max(0.0, self.scale - step) if self.stalled else min(1.0, self.scale + step)
         return self.scale
+
+
+class RetensionGuard:
+    """Compression is a failure mode: when a hitch is being PUSHED, slow the trailer behind it at once.
+
+    The resting sum of the four cable tensions of each hitch is learned over the first `retension_baseline_s`. Cables are
+    pre-tensioned, so a push (compression through the bar) unloads them: the sum falls below the baseline. Once it is more
+    than `retension_thresh_n` below, that hitch's scale drops immediately by `retension_gain_per_n` per N beyond the
+    threshold (floor `retension_min_scale`), and recovers at (1 - min)/release_s per second. A trailer's wheel scale is the
+    product of the scales of all hitches ahead of it.
+    """
+
+    def __init__(self, cfg, n_hitches: int):
+        self.enabled = cfg.retension_guard
+        self.n = n_hitches
+        self.base_s, self.thresh = cfg.retension_baseline_s, cfg.retension_thresh_n
+        self.gain, self.min_scale, self.release_s = cfg.retension_gain_per_n, cfg.retension_min_scale, cfg.retension_release_s
+        self.reset()
+
+    def reset(self) -> None:
+        self.baseline = [None] * self.n
+        self._acc = [[] for _ in range(self.n)]
+        self.scale = [1.0] * self.n
+        self.deficit = [0.0] * self.n
+        self._t_prev = None
+
+    def update(self, t: float, cable_sums) -> list[float]:
+        """cable_sums: measured sum of the four cable tensions per hitch (N). Returns one scale per hitch."""
+        dt = 0.0 if self._t_prev is None else max(t - self._t_prev, 0.0)
+        self._t_prev = t
+        if not self.enabled:
+            return self.scale
+        for j in range(self.n):
+            s = float(cable_sums[j])
+            if self.baseline[j] is None:
+                self._acc[j].append(s)
+                if t >= self.base_s:
+                    self.baseline[j] = sum(self._acc[j]) / len(self._acc[j])
+                continue
+            self.deficit[j] = max(0.0, (self.baseline[j] - self.thresh) - s)
+            target = max(self.min_scale, 1.0 - self.gain * self.deficit[j]) if self.deficit[j] > 0.0 else 1.0
+            if target < self.scale[j]:
+                self.scale[j] = target                                   # attack: immediately
+            else:
+                rate = (1.0 - self.min_scale) / self.release_s if self.release_s > 0 else 1.0
+                self.scale[j] = min(target, self.scale[j] + rate * dt)   # release: gradually
+        return self.scale
+
+    def trailer_scale(self, i: int) -> float:
+        """Wheel scale for trailer index i (0 = lead): product over hitches 0..i-1."""
+        out = 1.0
+        for j in range(min(i, self.n)):
+            out *= self.scale[j]
+        return out

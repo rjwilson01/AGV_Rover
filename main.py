@@ -15,7 +15,8 @@ from cli import build_parser
 from drive_profile import parse_drive
 from gnss import GNSSModel
 from imu import IMUModel
-from safeguard import FollowerGuard
+from loadcell import LoadCell
+from safeguard import FollowerGuard, RetensionGuard
 from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
 from test_sequence import DEFAULT_DURATION_S, Segment, parse_sequence
@@ -169,6 +170,10 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
     ir_camera = IRCameraModel(cfg)
     imu_model = IMUModel(cfg) if cfg.imu_enabled else None
     guard = FollowerGuard(cfg)
+    retension = RetensionGuard(cfg, cfg.num_trailers - 1)
+    cable_cells = [LoadCell(cfg, ch) for ch in range(4 * (cfg.num_trailers - 1))]
+    bar_cells = [LoadCell(cfg, 100 + ch) for ch in range(cfg.num_trailers - 1)]
+    cable_sums_meas = [0.0] * (cfg.num_trailers - 1)
     gnss_model = GNSSModel(cfg) if cfg.gnss_enabled else None
 
     wheel_names = [
@@ -224,6 +229,10 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 if imu_model is not None:
                     imu_model.reset()
                 guard.reset()
+                retension.reset()
+                for _c in cable_cells + bar_cells:
+                    _c.reset()
+                cable_sums_meas = [0.0] * (cfg.num_trailers - 1)
                 if gnss_model is not None:
                     gnss_model.reset()
                 apply_neutral_controls()
@@ -270,7 +279,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 v_lead_meas = v_lead_cmd                       # no fix: can't judge a stall, hold the guard
             guard_scale = guard.update(t, v_lead_cmd, v_lead_meas)
             for k, (w_name, w_vel) in enumerate(zip(wheel_names, wheel_vels)):
-                data.actuator(w_name).ctrl = w_vel * ramp * (1.0 if k < 2 else guard_scale)
+                data.actuator(w_name).ctrl = w_vel * ramp * (1.0 if k < 2 else guard_scale * retension.trailer_scale(k // 2))
 
             if bars:
                 # With yaw tubes the ball joint is only part of the hitch: use the true trailer-to-trailer R/P/Y.
@@ -351,6 +360,32 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 for c_name, t_name in zip(capstan_names, tendon_names)
             }
 
+            # Simulated load cells on the four cables (and optionally the bar) of each hitch; compression guard input
+            lc_metrics = {}
+            if cfg.loadcell_enabled:
+                for j_h in range(cfg.num_trailers - 1):
+                    vals = [cable_cells[4 * j_h + k].measure(float(data.time), forces[tendon_names[4 * j_h + k]]) for k in range(4)]
+                    tl_, tr_, bl_, br_ = vals
+                    cable_sums_meas[j_h] = sum(vals)
+                    for (code, _, _), v_ in zip(CORNER_SIGNS, vals):
+                        lc_metrics[f"joint{j_h + 1}/loadcell_{code}_N"] = round(v_, 2)
+                    lc_metrics[f"joint{j_h + 1}/cable_sum_N"] = round(sum(vals), 2)
+                    lc_metrics[f"joint{j_h + 1}/cable_yaw_moment_N"] = round((tl_ + bl_) - (tr_ + br_), 2)
+                    lc_metrics[f"joint{j_h + 1}/cable_pitch_moment_N"] = round((tl_ + tr_) - (bl_ + br_), 2)
+            if cfg.bar_loadcell_enabled and bars:
+                mujoco.mj_rnePostConstraint(model, data)      # fills data.cfrc_int (no model element needed)
+                for j_h in range(cfg.num_trailers - 1):
+                    # Force the parent transmits to the rear slider body through its joint, world frame, projected on
+                    # the bar axis (the slider body's x axis). Sign is set by bar_force_sign (see compare_loads.py).
+                    b_id = model.body(f"t{j_h + 1}_rear_slider").id
+                    axis = np.asarray(data.xmat[b_id]).reshape(3, 3)[:, 0]
+                    f_bar = cfg.bar_force_sign * float(np.dot(np.asarray(data.cfrc_int[b_id])[3:], axis))
+                    lc_metrics[f"joint{j_h + 1}/bar_axial_N"] = round(bar_cells[j_h].measure(float(data.time), f_bar), 2)
+            if cfg.loadcell_enabled:
+                retension.update(float(data.time), cable_sums_meas)
+                for j_h in range(cfg.num_trailers - 1):
+                    lc_metrics[f"retension/hitch{j_h + 1}_scale"] = round(retension.scale[j_h], 3)
+
             is_stopped = all(abs(v) < STOP_WHEEL_VEL_EPS for v in wheel_vels)
             if is_stopped:
                 post_stop_time += model.opt.timestep
@@ -358,6 +393,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 post_stop_time = 0.0
 
             extra_metrics = controller.get_telemetry()
+            extra_metrics.update(lc_metrics)
             extra_metrics["guard/follower_scale"] = round(guard_scale, 3)
             extra_metrics["guard/lead_speed_cmd_mps"] = round(v_lead_cmd, 3)
             extra_metrics["guard/lead_speed_meas_mps"] = round(v_lead_meas, 3)

@@ -139,6 +139,12 @@ class AGVConfig:
     guard_stall_ratio: float = 0.3
     guard_release_ratio: float = 0.6
     guard_stall_time_s: float = 0.5
+    retension_guard: bool = False              # compression at a hitch (cable sum below its resting value) slows the trailer behind
+    retension_baseline_s: float = 0.5          # resting cable sum is measured over the first this-many seconds
+    retension_thresh_n: float = 30.0           # compression declared when the sum is this far below the baseline
+    retension_gain_per_n: float = 0.005        # follower speed scale falls by this per N beyond the threshold
+    retension_min_scale: float = 0.5
+    retension_release_s: float = 1.0           # time to recover from min scale back to 1
     guard_min_cmd_mps: float = 0.15
     guard_ramp_s: float = 0.5
 
@@ -151,6 +157,14 @@ class AGVConfig:
     gnss_bias_tau_s: float = 10.0
     gnss_vel_noise_mps: float = 0.05
     gnss_outages_s: tuple = ()
+    loadcell_enabled: bool = True              # simulated cable load cells (fixed end of each cable)
+    loadcell_noise_n: float = 1.0
+    loadcell_resolution_n: float = 0.5
+    loadcell_range_n: float = 1000.0
+    loadcell_bw_hz: float = 50.0
+    loadcell_seed: int = 3
+    bar_loadcell_enabled: bool = False         # optional axial force sensor on the bar (yaw-tube build)
+    bar_force_sign: float = 1.0                # flip to -1 if a pull on the hitch reads negative
     gnss_seed: int = 2
 
     # --- IMU per trailer (defaults = Bosch BMI088 datasheet) ---
@@ -394,6 +408,12 @@ def load_config(
         guard_stall_ratio=float(c.get("guard_stall_ratio", 0.3)),
         guard_release_ratio=float(c.get("guard_release_ratio", 0.6)),
         guard_stall_time_s=float(c.get("guard_stall_time_s", 0.5)),
+        retension_guard=bool(c.get("retension_guard", False)),
+        retension_baseline_s=float(c.get("retension_baseline_s", 0.5)),
+        retension_thresh_n=float(c.get("retension_thresh_n", 30.0)),
+        retension_gain_per_n=float(c.get("retension_gain_per_n", 0.005)),
+        retension_min_scale=float(c.get("retension_min_scale", 0.5)),
+        retension_release_s=float(c.get("retension_release_s", 1.0)),
         guard_min_cmd_mps=float(c.get("guard_min_cmd_mps", 0.15)),
         guard_ramp_s=float(c.get("guard_ramp_s", 0.5)),
         lookahead_dist_m=float(c["lookahead_dist_m"]),
@@ -434,6 +454,14 @@ def load_config(
         gnss_vel_noise_mps=float(raw.get("gnss", {}).get("vel_noise_mps", 0.05)),
         gnss_outages_s=tuple((float(a), float(b)) for a, b in raw.get("gnss", {}).get("outages_s", [])),
         gnss_seed=int(raw.get("gnss", {}).get("seed", 2)),
+        loadcell_enabled=bool(raw.get("loadcell", {}).get("enabled", True)),
+        loadcell_noise_n=float(raw.get("loadcell", {}).get("noise_n", 1.0)),
+        loadcell_resolution_n=float(raw.get("loadcell", {}).get("resolution_n", 0.5)),
+        loadcell_range_n=float(raw.get("loadcell", {}).get("range_n", 1000.0)),
+        loadcell_bw_hz=float(raw.get("loadcell", {}).get("bw_hz", 50.0)),
+        loadcell_seed=int(raw.get("loadcell", {}).get("seed", 3)),
+        bar_loadcell_enabled=bool(raw.get("loadcell", {}).get("bar_enabled", False)),
+        bar_force_sign=float(raw.get("loadcell", {}).get("bar_force_sign", 1.0)),
         imu_enabled=bool(imu.get("enabled", True)),
         imu_rate_hz=float(imu.get("rate_hz", 400.0)),
         imu_acc_noise_ug_rthz=tuple(float(v) for v in imu.get("acc_noise_ug_rthz", (160.0, 160.0, 190.0))),

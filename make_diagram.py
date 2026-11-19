@@ -94,3 +94,78 @@ xml = ('<mxfile host="app.diagrams.net"><diagram name="AGV control structure" id
        '<root><mxCell id="0"/><mxCell id="1" parent="0"/>' + "".join(cells) + "".join(edges) + '</root></mxGraphModel></diagram></mxfile>')
 Path("docs/architecture.drawio").write_text(xml, encoding="utf-8")
 print("wrote docs/architecture.drawio:", len(cells), "cells,", len(edges), "arrows")
+
+
+# ======================================================================================================================
+# Second diagram: forces on ONE hitch (plan view) - the "stability, not push/pull" picture
+# ======================================================================================================================
+def _forces_diagram():
+    cs, es = [], []
+    n = [100]
+
+    def rect(x, y, w, h, text, fill="#ffffff", stroke="#666666", font=11, align="center"):
+        n[0] += 1
+        cs.append(f'<mxCell id="f{n[0]}" value="{escape(text).replace(chr(10), "&lt;br&gt;")}" style="rounded=1;whiteSpace=wrap;html=1;fillColor={fill};'
+                  f'strokeColor={stroke};fontSize={font};align={align};verticalAlign=middle;" vertex="1" parent="1">'
+                  f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
+
+    def text(x, y, w, h, t, color="#333333", font=11, bold=False):
+        n[0] += 1
+        cs.append(f'<mxCell id="f{n[0]}" value="{escape(t).replace(chr(10), "&lt;br&gt;")}" style="text;html=1;whiteSpace=wrap;align=left;verticalAlign=top;'
+                  f'fontSize={font};fontColor={color};' + ("fontStyle=1;" if bold else "") + f'" vertex="1" parent="1">'
+                  f'<mxGeometry x="{x}" y="{y}" width="{w}" height="{h}" as="geometry"/></mxCell>')
+
+    def vec(x1, y1, x2, y2, color, width=3, dashed=False, label=""):
+        n[0] += 1
+        st = f"endArrow=block;html=1;strokeColor={color};strokeWidth={width};fontSize=10;fontColor={color};" + ("dashed=1;" if dashed else "")
+        es.append(f'<mxCell id="f{n[0]}" value="{escape(label)}" style="{st}" edge="1" parent="1"><mxGeometry relative="1" as="geometry">'
+                  f'<mxPoint x="{x1}" y="{y1}" as="sourcePoint"/><mxPoint x="{x2}" y="{y2}" as="targetPoint"/></mxGeometry></mxCell>')
+
+    def line(x1, y1, x2, y2, color, width=2, dashed=False):
+        n[0] += 1
+        st = f"endArrow=none;html=1;strokeColor={color};strokeWidth={width};" + ("dashed=1;" if dashed else "")
+        es.append(f'<mxCell id="f{n[0]}" style="{st}" edge="1" parent="1"><mxGeometry relative="1" as="geometry">'
+                  f'<mxPoint x="{x1}" y="{y1}" as="sourcePoint"/><mxPoint x="{x2}" y="{y2}" as="targetPoint"/></mxGeometry></mxCell>')
+
+    text(40, 10, 1100, 30, "Forces on one hitch (plan view, travelling to the RIGHT): the hitch STABILISES, the wheels STEER", bold=True, font=15)
+    # trailers: j ahead (right), j+1 behind (left)
+    rect(60, 200, 220, 130, "trailer j+1 (behind)", "#dbe9fb", "#2a7ab9")
+    rect(520, 200, 220, 130, "trailer j (ahead)", "#dbe9fb", "#2a7ab9")
+    # bar + ball
+    line(280, 265, 520, 265, "#444444", 8)
+    rect(385, 250, 30, 30, "", "#ffffff", "#444444")
+    text(330, 285, 140, 20, "bar + ball joint", font=10)
+    # four cables (two shown per side in plan view: top and bottom cables overlap)
+    for y1, y2 in ((215, 215), (315, 315)):
+        line(280, y1, 520, y2, "#c0392b", 2)
+    text(330, 190, 220, 20, "cables: T_tl+T_bl (left pair)", "#c0392b", 10)
+    text(330, 318, 220, 20, "cables: T_tr+T_br (right pair)", "#c0392b", 10)
+    # hitch axial force N (equal and opposite on the two trailers)
+    vec(280, 265, 340, 265, "#1f5fbf", 3)
+    vec(520, 265, 460, 265, "#1f5fbf", 3)
+    text(345, 232, 110, 20, "N (+ tension)", "#1f5fbf", 10, True)
+    # wheel thrust and rolling resistance
+    vec(160, 345, 260, 345, "#2e8b57", 4); text(110, 350, 200, 20, "F_w: wheel thrust (wheel law)", "#2e8b57", 10, True)
+    vec(620, 345, 720, 345, "#2e8b57", 4); text(570, 350, 200, 20, "F_w: wheel thrust", "#2e8b57", 10, True)
+    vec(100, 185, 40, 185, "#888888", 2); text(40, 160, 160, 20, "R: rolling resistance", "#888888", 10)
+    # net residual and desired direction
+    vec(170, 265, 230, 265, "#d62728", 5, label="")
+    text(150, 130, 260, 36, "net = F_w - R + N  (residual, accelerates the trailer)", "#d62728", 10, True)
+    vec(170, 265, 270, 215, "#7b3fa0", 3, dashed=True)
+    text(95, 375, 340, 52, "v_des: path tangent + cross-track correction at THIS trailer.\nThe angle to its heading sets the wheel differential.", "#7b3fa0", 10)
+    # travel
+    vec(780, 265, 880, 265, "#333333", 3); text(790, 240, 100, 20, "travel", font=10)
+
+    # right-hand panel: signals and rules
+    rect(910, 60, 330, 120, "LOAD CELLS (fixed end of each cable)\nsum = T_tl+T_tr+T_bl+T_br\nyaw moment = (T_tl+T_bl) - (T_tr+T_br)\npitch moment = (T_tl+T_tr) - (T_bl+T_br)", "#fff2d6", "#d6a000", 11, "left")
+    rect(910, 200, 330, 150, "RULES\n1. Hitch = preloaded cables: a spring-like restoring torque, NOT an actuator.\n2. Wheels steer the trailer toward v_des.\n3. Tow, don't push: keep every hitch in tension.\n4. COMPRESSION IS A FAILURE: sum < baseline - 30 N => slow trailer j+1 at once (retension_guard); release over 1 s.", "#fde4e4", "#c0392b", 11, "left")
+    rect(910, 370, 330, 110, "OPTIONAL bar sensor (axial force through the bar)\nCompare with the cable sum: python compare_loads.py\nIf the cable sum tracks it, the bar sensor is not needed.", "#ece4f7", "#7b3fa0", 11, "left")
+    rect(60, 450, 700, 60, "Bar length is GEOMETRY (how far the trailers cut corners), not a force actuator. Keep it slow; keep forces in the cables and the wheels.", "#f5f5f5", "#999999", 11, "left")
+    xml = ('<mxfile host="app.diagrams.net"><diagram name="Forces on one hitch" id="agv2"><mxGraphModel dx="1400" dy="800" grid="1" gridSize="10" '
+           'guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="560" math="0" shadow="0">'
+           '<root><mxCell id="0"/><mxCell id="1" parent="0"/>' + "".join(cs) + "".join(es) + '</root></mxGraphModel></diagram></mxfile>')
+    Path("docs/hitch_forces.drawio").write_text(xml, encoding="utf-8")
+    print("wrote docs/hitch_forces.drawio:", len(cs), "shapes,", len(es), "arrows")
+
+
+_forces_diagram()

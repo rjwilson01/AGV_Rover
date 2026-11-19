@@ -208,6 +208,12 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `guard_stall_time_s` | 0.5 |  |  | ... for this long |
 | `guard_release_ratio` | 0.6 |  |  | resume when lead speed recovers above this x commanded |
 | `guard_min_cmd_mps` | 0.15 |  |  |  |
+| `retension_guard` | false |  |  | COMPRESSION = FAILURE: when a hitch's cable-tension sum drops below its resting value the trailer behind is slowed at once |
+| `retension_baseline_s` | 0.5 |  |  | resting cable sum is learned over the first this-many seconds |
+| `retension_thresh_n` | 30.0 |  |  | compression declared this many N below the baseline |
+| `retension_gain_per_n` | 0.005 |  |  | follower speed scale falls by this per N beyond the threshold |
+| `retension_min_scale` | 0.5 |  |  |  |
+| `retension_release_s` | 1.0 |  |  | recovery time from the minimum scale back to 1 |
 | `guard_ramp_s` | 0.5 |  |  | follower speed ramps to/from zero over this long |
 | `start_ramp_s` | 2.0 |  |  | Wheel speed ramps 0 -> full over this long (0 = step). Avoids a launch torque kick. |
 | `use_ir_camera_feedback` | false |  |  |  |
@@ -266,6 +272,19 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `gyro_range_dps` | 500.0 |  |  |  |
 | `vibration_g_rms` | 0.0 |  |  | add broadband accelerometer vibration (engine / cutter blade) |
 | `seed` | 1 |  |  |  |
+
+### `[loadcell]`
+
+| Key | Default | Variable | Fixed | Description |
+|---|---|---|---|---|
+| `enabled` | true |  |  | Cable load cells at the fixed end of each cable (signed, N). The optional bar cell measures axial force through the bar. |
+| `noise_n` | 1.0 |  |  | rms noise |
+| `resolution_n` | 0.5 |  |  | quantisation step |
+| `range_n` | 1000.0 |  |  | saturates beyond +-this |
+| `bw_hz` | 50.0 |  |  | one-pole low-pass |
+| `seed` | 3 |  |  |  |
+| `bar_enabled` | false |  |  | optional bar axial-force reading, computed from the simulator's interaction force (nothing is added to the model); yaw-tube build only |
+| `bar_force_sign` | 1.0 |  |  | -1 if a pull on the hitch reads negative (confirm with a tow test; compare_loads.py reports the slope sign) |
 
 ### `[gnss]`
 
@@ -394,6 +413,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Simulated cable load cells (`loadcell.py`, `[loadcell]`; channels `jointJ/loadcell_*_N`, `cable_sum_N`, yaw/pitch moments), an optional bar axial-force reading computed from the simulator (no model element), `compare_loads.py` (is a bar sensor worthwhile?), and an optional compression guard `retension_guard` (default off) that slows the trailer behind a hitch that is being pushed. `docs/hitch_forces.drawio` shows the forces on one hitch; `docs/ALGORITHMS.md` covers the spring-oscillation question.
 * `--view` is now a sandbox: the real controller runs on manual inputs, each algorithm has an on/off switch, pop-out Tk window with key/button repeat and a commanded-vs-measured readout (`sandbox.py`, `tkpanel.py`, `manual.py`); default `--base fixed`.
 * Wheels carry a white cross so rotation is visible. `docs/ALGORITHMS.md` and `docs/architecture.drawio` (`make_diagram.py`) describe the algorithms.
 * Follower wheel speeds now use the true hitch geometry of the yaw-tube build (`wheel_use_tube_geometry`): the ball is off the trailer axis when a tube is yawed, so the velocity-matching recursion uses its position from the tube yaws and bar lengths (reduces to the old law at zero tube yaw; verified against the rigid-body geometry).

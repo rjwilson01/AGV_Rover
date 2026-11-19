@@ -348,11 +348,14 @@ Parameters that exist only in `[mass_layout]` when set: `battery_z_m` (battery h
 | `t_follow_lead_history` | Old follower reference: replay the lead's own steering history instead of the smooth planned path (A/B). | controller.follow_ideal_path=false |
 | `t_gnss_outage` | Lead GNSS fix lost 8-12 s: guard must hold (not trip) and the run should carry on. | gnss.outages_s=[[8.0, 12.0]] |
 | `t_ideal_sensors` | Stage 1: perfect instruments. Any steering/path-following problem seen with this file is a control or physics problem, not a sensor problem. | ir_camera.noise_std_deg=0.0, ir_camera.latency_s=0.0, ir_camera.quantization_deg=0.0, imu.acc_noise_ug_rthz=[0.0, 0.0, 0.0], imu.acc_offset… |
+| `t_no_dev` | Return-leg experiment: followers follow the pure ideal path (no share of the lead's deviation from it). | controller.ref_dev_gain=0.0 |
 | `t_no_slosh` | Slosh cut 60x. Is the sloshing water driving the pitch mode? The moving mass is cut 60x (72 kg -> 1.2 kg) and its stiffness/damping are cut by the same factor, so the pendulum keeps its time constants (a tiny mass with the default damping is numerically unstable at a 2 ms step) but barely pushes on the carts. The water is not removed: the other 98% becomes fixed mass. | tank_slosh.slosh_mass_fraction=0.01, tank_slosh.slosh_roll_stiffness=1.08, tank_slosh.slosh_pitch_stiffness=0.58, tank_slosh.slosh_damping=… |
+| `t_old_cables` | Return-leg experiment: size the hitch cables for the COMMANDED tube angles (behaviour before 24bcc2e). | controller.cable_use_measured_tubes=false |
 | `t_planner_off` | Old behaviour: raw waypoint polyline, curvature clipped only by max_curvature. | controller.planner_enabled=false |
 | `t_real_layout` | Real mass layout (batt at axle, water mid). Real mass layout, per cart: 110 kg dry INCLUDING a ~65 kg battery (10 kWh Li, 54 V) in a layer at axle height; 100 L of water spread over the full chassis footprint, so its centre is about the chassis centre. Water is nearly a full tank, so only 30% is modelled as slosh, hanging from a pivot at +0.12 m (bob at the centre). stiffness/damping scaled with the smaller slosh mass (30 kg vs 72 kg) so the pendulum stays well-conditioned | geometry.trailer_dry_mass_kg=110.0, mass_layout.battery_mass_kg=65.0, mass_layout.water_rigid_z_m=0.0, mass_layout.slosh_pivot_z_m=0.12, ta… |
 | `t_real_sensors` | Stage 2: realistic instruments (IR camera noise, delay and quantisation; BMI088 and ZED-F9P figures are the defaults). Compare against t_ideal_sensors: the difference is what the sensors cost you. | ir_camera.noise_std_deg=0.3, ir_camera.latency_s=0.05, ir_camera.quantization_deg=0.1 |
 | `t_rough_field` | Stage 3: add engine/cutter-blade vibration on the IMU on top of t_real_sensors. | imu.vibration_g_rms=0.3 |
+| `t_slow_unwind` | Return-leg experiment: slower and with gentler curvature changes, so the chain has time to unwind after the U. | controller.v_center_mps=0.7, controller.curv_rate_limit_per_m=0.3 |
 | `t_stiff_cables` | Stiff + preloaded cables. Stiffer cables and ~900 N preload so top AND bottom cables stay taut (currently ~4 N, top cables go slack). | geometry.cable_preload_offset_m=0.015, actuators.capstan_kp=60000.0 |
 | `t_twitchy_old` | Old steering: fixed 1.6 m lookahead, raw curvature, followers may stall. For A/B against the smoothed default. | controller.lookahead_gain_s=0.0, controller.curv_filter_m=0.0, controller.curv_rate_limit_per_m=0.0, controller.follower_min_speed_frac=0.0 |
 | `t_two_trailers` | Two-trailer train: the simplest set-up for impulse / step-response studies (use with --drive). | geometry.num_trailers=2 |
@@ -391,6 +394,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Return-leg experiment test files: `t_slow_unwind`, `t_old_cables`, `t_no_dev`.
 * `--view --base free|fixed|planar` and `--view --no-friction` for hand-testing the hitches with the lead pinned and/or a frictionless floor.
 * Hitch cables are sized for the MEASURED tube angles (`cable_use_measured_tubes`, default on) so a lagging tube no longer makes the cables fight it and swing the passive ball (ball yaw reached -52 deg on the return leg). `false` restores the old behaviour.
 * `--view` is now a manual review with keyboard hot keys and an on-screen panel (`manual.py`); test-parameter runs write `sim_test_log.csv`, plain runs `sim_log.csv`.

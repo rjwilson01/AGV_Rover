@@ -1,0 +1,5 @@
+# Return-leg experiment: size the hitch cables for the COMMANDED tube angles (behaviour before 24bcc2e).
+[test]
+duration_s = 30
+[controller]
+cable_use_measured_tubes = false

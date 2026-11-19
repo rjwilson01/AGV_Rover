@@ -1,0 +1,5 @@
+# Return-leg experiment: followers follow the pure ideal path (no share of the lead's deviation from it).
+[test]
+duration_s = 30
+[controller]
+ref_dev_gain = 0.0

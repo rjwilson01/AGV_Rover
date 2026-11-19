@@ -1,0 +1,6 @@
+# Return-leg experiment: slower and with gentler curvature changes, so the chain has time to unwind after the U.
+[test]
+duration_s = 40
+[controller]
+v_center_mps = 0.7
+curv_rate_limit_per_m = 0.3

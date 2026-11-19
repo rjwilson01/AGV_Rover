@@ -293,11 +293,18 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 ir = ir_readings[j_idx]
                 if bars:
                     psi_r, psi_f = bar_yaws[j_idx]
-                    y_ball_cmd = y_cmd - psi_r - psi_f          # what the tubes cannot take goes to the ball
+                    psi_r_meas = float(data.joint(f"yaw_rear_{j_idx + 1}").qpos.item())
+                    psi_f_meas = float(data.joint(f"yaw_front_{j_idx + 2}").qpos.item())
+                    if cfg.cable_use_measured_tubes:
+                        # Size the cables for where the tubes ARE, and let the ball take whatever the tubes have not yet
+                        # delivered. Sizing them for the commanded tubes makes the cables fight a lagging tube and the
+                        # passive ball swings far from its command (seen: -52 deg on the return leg).
+                        psi_r_cab, psi_f_cab = psi_r_meas, psi_f_meas
+                    else:
+                        psi_r_cab, psi_f_cab = psi_r, psi_f
+                    y_ball_cmd = y_cmd - psi_r_cab - psi_f_cab  # what the tubes cannot take goes to the ball
                     # Hold the ball's current pitch/roll: IR trailer R/P/Y minus the measured tube angles
                     if cfg.use_ir_camera_feedback:
-                        psi_r_meas = float(data.joint(f"yaw_rear_{j_idx + 1}").qpos.item())
-                        psi_f_meas = float(data.joint(f"yaw_front_{j_idx + 2}").qpos.item())
                         _, p_ball, r_ball = ball_ypr_from_trailer_relative(
                             (ir.yaw, ir.pitch, ir.roll), psi_r_meas, psi_f_meas
                         )
@@ -307,7 +314,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                     data.actuator(f"act_yaw_front_{j_idx + 2}").ctrl = psi_f
                     for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
                         data.actuator(capstan_names[4 * j_idx + k]).ctrl = (
-                            trailer_cable_len(psi_r, psi_f, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cmd, f_cmd)
+                            trailer_cable_len(psi_r_cab, psi_f_cab, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cmd, f_cmd)
                             - cfg.cable_preload_offset_m
                         )
                 else:

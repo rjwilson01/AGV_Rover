@@ -187,6 +187,7 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `ref_dev_gain` | 1.0 |  |  | share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path) |
 | `ref_dev_filter_m` | 2.0 |  |  | distance low-pass on that deviation, m |
 | `ref_dev_max` | 0.35 |  |  | clip on the deviation curvature, 1/m |
+| `cable_use_measured_tubes` | true |  |  | yaw-tube build: size the hitch cables for the MEASURED tube angles (false = commanded, the old behaviour) |
 | `bar_pitch_limit` | true |  |  | Variable build: shorten the bars when hitch pitch would put a bar end on the ground |
 | `bar_ground_margin_m` | 0.06 |  |  | clearance kept under the bars, m |
 | `planner_runout_m` | 3.0 |  |  | straight extension past the goal so the lookahead never collapses onto it; the train still stops at the real goal |
@@ -378,6 +379,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Hitch cables are sized for the MEASURED tube angles (`cable_use_measured_tubes`, default on) so a lagging tube no longer makes the cables fight it and swing the passive ball (ball yaw reached -52 deg on the return leg). `false` restores the old behaviour.
 * `--view` is now a manual review with keyboard hot keys and an on-screen panel (`manual.py`); test-parameter runs write `sim_test_log.csv`, plain runs `sim_log.csv`.
 * Variable build shortens the bars when hitch pitch would put a bar end on the ground (`bar_pitch_limit`, `bar_ground_margin_m`): max length = (axle height - margin) / sin|IR pitch|, never below the minimum.
 * Followers now follow the ideal path plus the lead's smoothed deviation from it (`ref_dev_gain`, `ref_dev_filter_m`, `ref_dev_max`), so a lead that cuts a corner and corrects back no longer drags the chain the wrong way (return-leg jackknife). `ref_dev_gain=0` restores the pure ideal path.

@@ -50,7 +50,7 @@ class ControlWindow:
         for i, p in enumerate(ctl.params):
             name = tk.Label(sp, text=p.label, anchor="w", width=38)
             name.grid(row=i, column=0, sticky="w")
-            val = tk.Label(sp, text="", anchor="e", width=32, font=("Courier", 10))
+            val = tk.Label(sp, text="", anchor="e", width=52, font=("Courier", 10))
             val.grid(row=i, column=1)
             btn_m = tk.Button(sp, text=" - ", width=3)
             btn_p = tk.Button(sp, text=" + ", width=3)

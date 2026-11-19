@@ -85,7 +85,7 @@ class VariableDrawbarController(BaseSnakeController):
         wheel_vels = []
         use_ir_wheels = self.cfg.wheel_speed_from_ir and ir_readings is not None
         if use_ir_wheels:
-            wheel_vels = self._ir_wheel_vels(v_cmd, kappa, bar_lengths, self._ref_curvature(0.0) if self._use_ref() else None)
+            wheel_vels = self._ir_wheel_vels(v_cmd, kappa, bar_lengths, self._ref_curvature(0.0) if self._use_ref() else None, bar_yaws)
         for i in range(0 if use_ir_wheels else self.num_trailers):
             if i == 0:
                 psi = joint_yaws[0]

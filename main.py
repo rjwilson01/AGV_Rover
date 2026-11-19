@@ -302,6 +302,12 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                         psi_r_cab, psi_f_cab = psi_r_meas, psi_f_meas
                     else:
                         psi_r_cab, psi_f_cab = psi_r, psi_f
+                    r_cab, f_cab = r_cmd, f_cmd
+                    if cfg.cable_use_measured_tubes:         # same for the telescoping bars: cables follow where they ARE
+                        if f"slide_rear_{j_idx + 1}" in joint_names_set:
+                            r_cab = r_max - float(data.joint(f"slide_rear_{j_idx + 1}").qpos.item())
+                        if f"slide_front_{j_idx + 2}" in joint_names_set:
+                            f_cab = f_max - float(data.joint(f"slide_front_{j_idx + 2}").qpos.item())
                     y_ball_cmd = y_cmd - psi_r_cab - psi_f_cab  # what the tubes cannot take goes to the ball
                     # Hold the ball's current pitch/roll: IR trailer R/P/Y minus the measured tube angles
                     if cfg.use_ir_camera_feedback:
@@ -314,7 +320,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                     data.actuator(f"act_yaw_front_{j_idx + 2}").ctrl = psi_f
                     for k, (_, ys, zs) in enumerate(CORNER_SIGNS):
                         data.actuator(capstan_names[4 * j_idx + k]).ctrl = (
-                            trailer_cable_len(psi_r_cab, psi_f_cab, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cmd, f_cmd)
+                            trailer_cable_len(psi_r_cab, psi_f_cab, (y_ball_cmd, p_ball, r_ball), ys, zs, cfg, r_cab, f_cab)
                             - cfg.cable_preload_offset_m
                         )
                 else:

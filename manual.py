@@ -125,12 +125,20 @@ class ManualControls:
                 # tubes take half the yaw each (inside their own ranges); the ball takes the rest
                 psi_r = float(np.clip(y / 2.0, rad(cfg.rear_bar_yaw_range_deg[0]), rad(cfg.rear_bar_yaw_range_deg[1])))
                 psi_f = float(np.clip(y / 2.0, rad(cfg.front_bar_yaw_range_deg[0]), rad(cfg.front_bar_yaw_range_deg[1])))
-                y_ball = y - psi_r - psi_f
                 data.actuator(f"act_yaw_rear_{j}").ctrl = psi_r
                 data.actuator(f"act_yaw_front_{j + 1}").ctrl = psi_f
+                psi_r_c, psi_f_c, r_c, f_c = psi_r, psi_f, r_len, f_len
+                if cfg.cable_use_measured_tubes:     # cables follow where the tubes and bars ARE (as in main.py)
+                    psi_r_c = float(data.joint(f"yaw_rear_{j}").qpos.item())
+                    psi_f_c = float(data.joint(f"yaw_front_{j + 1}").qpos.item())
+                    if rear_act in model_actuators:
+                        r_c = r_max - float(data.joint(f"slide_rear_{j}").qpos.item())
+                    if front_act in model_actuators:
+                        f_c = f_max - float(data.joint(f"slide_front_{j + 1}").qpos.item())
+                y_ball = y - psi_r_c - psi_f_c
                 for k, (code, ys, zs) in enumerate(CORNER_SIGNS):
                     data.actuator(f"cap_t{j}_t{j + 1}_{code}").ctrl = (
-                        trailer_cable_len(psi_r, psi_f, (y_ball, p, r), ys, zs, cfg, r_len, f_len)
+                        trailer_cable_len(psi_r_c, psi_f_c, (y_ball, p, r), ys, zs, cfg, r_c, f_c)
                         - cfg.cable_preload_offset_m
                     )
             else:

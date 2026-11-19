@@ -54,6 +54,7 @@ planner_radius_cap_m = 8.0
 ref_dev_gain = 1.0                 # share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path)
 ref_dev_filter_m = 2.0             # distance low-pass on that deviation, m
 ref_dev_max = 0.35                 # clip on the deviation curvature, 1/m
+wheel_use_tube_geometry = true     # yaw-tube build: follower wheel speeds use the ball's true (off-axis) position from the tube yaws and bar lengths
 cable_use_measured_tubes = true    # yaw-tube build: size the hitch cables for the MEASURED tube angles (false = commanded, the old behaviour)
 bar_pitch_limit = true             # Variable build: shorten the bars when hitch pitch would put a bar end on the ground
 bar_ground_margin_m = 0.06         # clearance kept under the bars, m

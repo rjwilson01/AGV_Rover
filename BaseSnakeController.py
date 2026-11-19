@@ -3,6 +3,7 @@ from collections import deque
 from collections.abc import Sequence
 import importlib
 import numpy as np
+from bar_geometry import pivot_x_m
 from planner import chain_curvature_limit, path_curvature, plan_path
 from config import AGVConfig
 
@@ -303,7 +304,8 @@ class BaseSnakeController(ABC):
         """
         ...
 
-    def _ir_wheel_vels(self, v_cmd: float, kappa: float, bar_lengths, kappa_follow: float | None = None) -> list[float]:
+    def _ir_wheel_vels(self, v_cmd: float, kappa: float, bar_lengths, kappa_follow: float | None = None,
+                       bar_yaws=None) -> list[float]:
         """Wheel speeds for every trailer from the hitch kinematics and the MEASURED joint yaws.
 
         Planar model: trailer j has speed v_j and yaw rate w_j; its rear hitch point is L_r behind its axle, and the
@@ -313,6 +315,12 @@ class BaseSnakeController(ABC):
             w_{j+1} = -(v_j sin(psi) + w_j L_r cos(psi)) / L_f
         The lead trailer follows the pure-pursuit curvature: w_0 = v_cmd * kappa. w is counter-clockwise positive, so in a
         left turn the RIGHT wheel is faster.
+
+        With yaw tubes (bar_yaws given: commanded (rear, front) tube yaw per hitch) the hitch point is the BALL, which is
+        off the trailer axis whenever a tube is yawed: in trailer j's frame it is b = (-p - s_r cos(psi_r), -s_r sin(psi_r)),
+        in trailer j+1's frame a = (p + s_f cos(psi_f), -s_f sin(psi_f)), with p the tube pivot distance and s the
+        pivot-to-ball reach. Matching the ball's velocity on both sides (and no lateral slip of trailer j+1's axle) gives
+        the same recursion with those lever arms. With psi_r = psi_f = 0 it reduces exactly to the formulas above.
         """
         v, w = float(v_cmd), float(v_cmd) * float(kappa)
         states = [(v, w)]
@@ -323,8 +331,19 @@ class BaseSnakeController(ABC):
             psi = self.last_ir_readings[j][0]
             l_r, l_f = bar_lengths[j]
             s, c = np.sin(psi), np.cos(psi)
-            v_next = v * c - w * l_r * s
-            w_next = -(v * s + w * l_r * c) / max(l_f, NUMERIC_EPS)
+            if bar_yaws is not None and self.cfg.wheel_use_tube_geometry:
+                p = pivot_x_m(self.cfg)
+                psi_r, psi_f = bar_yaws[j]
+                s_r, s_f = l_r - p, l_f - p
+                bx, by = -p - s_r * np.cos(psi_r), -s_r * np.sin(psi_r)          # ball in trailer j frame
+                ax, ay = p + s_f * np.cos(psi_f), -s_f * np.sin(psi_f)           # ball in trailer j+1 frame
+                vbx, vby = v - w * by, w * bx                                    # ball velocity, trailer j frame
+                vbx2, vby2 = vbx * c + vby * s, -vbx * s + vby * c               # ... in trailer j+1 frame
+                w_next = vby2 / max(ax, NUMERIC_EPS)
+                v_next = vbx2 + w_next * ay
+            else:
+                v_next = v * c - w * l_r * s
+                w_next = -(v * s + w * l_r * c) / max(l_f, NUMERIC_EPS)
             v = float(np.clip(v_next, self.cfg.follower_min_speed_frac * abs(v_cmd), 2.0 * abs(v_cmd)))
             w = float(np.clip(w_next, -w_lim, w_lim))
             states.append((v, w))

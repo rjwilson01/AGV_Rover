@@ -199,6 +199,7 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `ref_dev_gain` | 1.0 |  |  | share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path) |
 | `ref_dev_filter_m` | 2.0 |  |  | distance low-pass on that deviation, m |
 | `ref_dev_max` | 0.35 |  |  | clip on the deviation curvature, 1/m |
+| `wheel_use_tube_geometry` | true |  |  | yaw-tube build: follower wheel speeds use the ball's true (off-axis) position from the tube yaws and bar lengths |
 | `cable_use_measured_tubes` | true |  |  | yaw-tube build: size the hitch cables for the MEASURED tube angles (false = commanded, the old behaviour) |
 | `bar_pitch_limit` | true |  |  | Variable build: shorten the bars when hitch pitch would put a bar end on the ground |
 | `bar_ground_margin_m` | 0.06 |  |  | clearance kept under the bars, m |
@@ -394,6 +395,8 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Follower wheel speeds now use the true hitch geometry of the yaw-tube build (`wheel_use_tube_geometry`): the ball is off the trailer axis when a tube is yawed, so the velocity-matching recursion uses its position from the tube yaws and bar lengths (reduces to the old law at zero tube yaw; verified against the rigid-body geometry).
+* Hitch cables follow the MEASURED telescoping-bar lengths as well as the measured tube yaws (`cable_use_measured_tubes`), in the controller run and in `--view`.
 * Return-leg experiment test files: `t_slow_unwind`, `t_old_cables`, `t_no_dev`.
 * `--view --base free|fixed|planar` and `--view --no-friction` for hand-testing the hitches with the lead pinned and/or a frictionless floor.
 * Hitch cables are sized for the MEASURED tube angles (`cable_use_measured_tubes`, default on) so a lagging tube no longer makes the cables fight it and swing the passive ball (ball yaw reached -52 deg on the return leg). `false` restores the old behaviour.

@@ -128,6 +128,7 @@ class AGVConfig:
     ref_dev_gain: float = 1.0                  # share of the lead's deviation from the ideal path passed on to followers (0 = pure ideal path)
     ref_dev_filter_m: float = 2.0              # distance low-pass on that deviation
     ref_dev_max: float = 0.35                  # clip on the deviation curvature, 1/m
+    wheel_use_tube_geometry: bool = True        # follower wheel speeds use the ball's off-axis position from the tube yaws
     cable_use_measured_tubes: bool = True       # size the hitch cables for the measured tube angles (ball takes the lag)
     bar_pitch_limit: bool = True                # shorten the bars when hitch pitch would put a bar end on the ground
     bar_ground_margin_m: float = 0.06           # clearance kept under the bars (tube radius plus a little)
@@ -383,6 +384,7 @@ def load_config(
         planner_radius_cap_m=float(c.get("planner_radius_cap_m", 8.0)),
         planner_runout_m=float(c.get("planner_runout_m", 3.0)),
         bar_pitch_limit=bool(c.get("bar_pitch_limit", True)),
+        wheel_use_tube_geometry=bool(c.get("wheel_use_tube_geometry", True)),
         cable_use_measured_tubes=bool(c.get("cable_use_measured_tubes", True)),
         bar_ground_margin_m=float(c.get("bar_ground_margin_m", 0.06)),
         ref_dev_gain=float(c.get("ref_dev_gain", 1.0)),

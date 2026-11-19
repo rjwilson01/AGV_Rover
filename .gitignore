@@ -6,3 +6,7 @@ sim_log_*.csv
 ClaudeInstrutions.txt
 plotjuggler.log
 MUJOCO_LOG.TXT
+mjmodel.xml
+MJMODEL.TXT
+mjmodel.mjb
+MJDATA.TXT

@@ -30,6 +30,7 @@ class FixedDrawbarController(BaseSnakeController):
         if drive is not None:
             self.kappa_raw = self.kappa_shaped = float(kappa)
         self.path_history.append((self.dist_traveled, kappa))
+        self._record_dev(kappa)
 
         r_bar = self.cfg.nominal_rear_bar_m
         f_bar = self.cfg.nominal_front_bar_m

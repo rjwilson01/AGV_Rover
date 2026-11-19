@@ -34,6 +34,7 @@ class VariableDrawbarController(BaseSnakeController):
         if drive is not None:
             self.kappa_raw = self.kappa_shaped = float(kappa)
         self.path_history.append((self.dist_traveled, kappa))
+        self._record_dev(kappa)
 
         r_min, r_max = self.cfg.rear_bar_range_m
         f_min, f_max = self.cfg.front_bar_range_m

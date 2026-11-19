@@ -133,8 +133,34 @@ class BaseSnakeController(ABC):
             return 0.0                              # straight before the start / after the end
         return float(np.interp(s, self.ref_s, self.ref_kappa))
 
+    def _record_dev(self, kappa: float) -> None:
+        """Remember how far the lead's (shaped) curvature departs from the ideal path's, low-passed over distance.
+
+        Followers add this back at their delay, so when the lead has to correct an off-path error (e.g. after cutting a
+        corner) the chain bends the way the lead actually did, instead of the way the ideal path alone says.
+        """
+        if self.ref_s is None:
+            return
+        dev = float(kappa) - self._ref_curvature(0.0)
+        ds = max(self.dist_traveled - self._dev_last_dist, 0.0)
+        self._dev_last_dist = self.dist_traveled
+        a = 1.0 - float(np.exp(-ds / max(self.cfg.ref_dev_filter_m, 1e-6)))
+        self._dev_f += a * (dev - self._dev_f)
+        lim = self.cfg.ref_dev_max
+        self.dev_history.append((self.dist_traveled, float(np.clip(self._dev_f, -lim, lim))))
+
+    def _lookup_dev(self, delay_m: float) -> float:
+        target_d = self.dist_traveled - delay_m
+        for d, v in reversed(self.dev_history):
+            if d <= target_d:
+                return v
+        return 0.0
+
     def _follow_curvature(self, delay_m: float) -> float:
-        return self._ref_curvature(delay_m) if self._use_ref() else self._lookup_curvature(delay_m)
+        if not self._use_ref():
+            return self._lookup_curvature(delay_m)
+        k = self._ref_curvature(delay_m) + self.cfg.ref_dev_gain * self._lookup_dev(delay_m)
+        return float(np.clip(k, -self.max_curvature, self.max_curvature))
 
     def _drive_cmd(self):
         return self.drive(self.sim_time) if self.drive is not None else None
@@ -142,6 +168,9 @@ class BaseSnakeController(ABC):
     def reset(self) -> None:
         self.s_ref = 0.0
         self.s_proj = 0.0
+        self.dev_history = deque(maxlen=PATH_HISTORY_MAX_SAMPLES)
+        self._dev_f = 0.0
+        self._dev_last_dist = 0.0
         self._ref_last_dist = 0.0
         self.dist_traveled = 0.0
         self.prev_pos = None

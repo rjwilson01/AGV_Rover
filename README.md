@@ -172,6 +172,9 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `planner_margin` | 0.85 |  |  | fraction of the hitch yaw range the planner may use |
 | `planner_spacing_m` | 0.05 |  |  |  |
 | `planner_radius_cap_m` | 8.0 |  |  |  |
+| `ref_dev_gain` | 1.0 |  |  | share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path) |
+| `ref_dev_filter_m` | 2.0 |  |  | distance low-pass on that deviation, m |
+| `ref_dev_max` | 0.35 |  |  | clip on the deviation curvature, 1/m |
 | `planner_runout_m` | 3.0 |  |  | straight extension past the goal so the lookahead never collapses onto it; the train still stops at the real goal |
 | `guard_enabled` | true |  |  | Followers stop if the lead is commanded to move but isn't (blocked/collided) |
 | `guard_stall_ratio` | 0.3 |  |  | stalled when measured lead speed < this x commanded ... |
@@ -361,6 +364,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Followers now follow the ideal path plus the lead's smoothed deviation from it (`ref_dev_gain`, `ref_dev_filter_m`, `ref_dev_max`), so a lead that cuts a corner and corrects back no longer drags the chain the wrong way (return-leg jackknife). `ref_dev_gain=0` restores the pure ideal path.
 * Return-leg fix: planned path gets a straight run-out (`planner_runout_m`, 3 m) past the goal so the lookahead and reference curvature don't collapse at the end; the train stops on arc-length progress to the real goal (not a geometric test), so the followers keep their reference until the lead actually arrives.
 * Idealised reference path for followers (`follow_ideal_path`); `--view`, `--dump-xml`, `--drive`; this README and `make_readme.py`.
 * `--selfcheck`; passed-end stop; speed-scaled lookahead and curvature shaping; follower speed floor.

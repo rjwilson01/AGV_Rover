@@ -80,7 +80,7 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
     win = None
     try:
         from tkpanel import ControlWindow
-        win = ControlWindow(ctl)
+        win = ControlWindow(ctl, sandbox=sb)
     except Exception as exc:                                    # no Tk (or no display): use the viewer overlay instead
         print(f"[view] pop-out window unavailable ({exc}); using the on-screen panel in the viewer")
 

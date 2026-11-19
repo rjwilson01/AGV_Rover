@@ -1,0 +1,7 @@
+# Shorter telescoping bars (current 1.00-1.50 m look long against a 0.9 m chassis). Bar length = trailer centre to ball.
+# Pivot is 0.40 m from the centre, so 0.80-1.00 m leaves 0.40-0.60 m of bar beyond the pivot. Needs a rebuild: set at startup only.
+[test]
+TestName = "short bars 0.80-1.00 m"
+[drawbar]
+rear_bar_range_m = [0.80, 1.00]
+front_bar_range_m = [0.80, 1.00]

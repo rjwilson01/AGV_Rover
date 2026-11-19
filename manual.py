@@ -73,7 +73,7 @@ class ManualControls:
         f_min, f_max = cfg.front_bar_range_m
         kmax = float(cfg.max_curvature)
         self.params += [
-            Param("lead_speed", "lead speed", "m/s", 0.2, 0.2, -2.0, 2.0, 0.05),
+            Param("lead_speed", "lead speed", "m/s", float(cfg.view_lead_speed_mps), float(cfg.view_lead_speed_mps), -2.0, 2.0, 0.05),
             Param("lead_kappa", "lead curvature", "1/m", 0.0, 0.0, -kmax, kmax, 0.02),
             Param("follow_kappa", "curvature the followers see", "1/m", 0.0, 0.0, -kmax, kmax, 0.02),
             Param("wheel_speed", "all wheels speed (wheel law OFF)", "m/s", 0.0, 0.0, -3.0, 3.0, 0.05),

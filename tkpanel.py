@@ -19,7 +19,7 @@ REPEAT_FIRST_MS, REPEAT_MS, REFRESH_S = 350, 60, 0.1
 
 
 class ControlWindow:
-    def __init__(self, ctl, tk_module=None):
+    def __init__(self, ctl, tk_module=None, sandbox=None):
         if tk_module is None:
             import tkinter as tk_module            # may raise ImportError: the caller falls back to the viewer text panel
         self.tk = tk_module
@@ -75,6 +75,7 @@ class ControlWindow:
         # --- live readout
         self.text = tk.Text(self.root, height=22, width=100, font=("Courier", 9))
         self.text.pack(fill="both", expand=True, padx=6, pady=4)
+        self.forces = ForceWindow(self.root, sandbox, tk) if sandbox is not None else None
         self.refresh(force=True)
 
     # -- input ----------------------------------------------------------------------------------------------------
@@ -143,6 +144,8 @@ class ControlWindow:
         self.pause_btn.config(text="Resume physics (Space)" if self.ctl.paused else "Pause physics (Space)")
         self.text.delete("1.0", "end")
         self.text.insert("1.0", self.ctl.readout or "(readout appears once the simulation is running)")
+        if self.forces is not None:
+            self.forces.refresh()
 
     def update(self) -> bool:
         """Call every frame. False once the window has been closed."""
@@ -154,3 +157,49 @@ class ControlWindow:
         except Exception:
             self.alive = False
         return self.alive
+
+
+class ForceWindow:
+    """Second window: the live force diagram of one hitch (see forceview.py). Buttons pick the hitch, tare the resting
+    cable sum, and change the arrow scale."""
+
+    def __init__(self, parent, sandbox, tk_module):
+        tk = tk_module
+        self.sb = sandbox
+        self.hitch = 1
+        self.scale = 0.25
+        self.w, self.h = 760, 440
+        self.win = tk.Toplevel(parent)
+        self.win.title("AGV hitch forces (live)")
+        bar = tk.Frame(self.win)
+        bar.pack(fill="x")
+        self.n_hitches = max(sandbox.cfg.num_trailers - 1, 1)
+        for j in range(1, self.n_hitches + 1):
+            tk.Button(bar, text=f"Hitch {j}", command=lambda jj=j: self.select(jj)).pack(side="left")
+        tk.Button(bar, text="Tare resting tension", command=self.sb.tare).pack(side="left", padx=8)
+        tk.Button(bar, text="Arrows x2", command=lambda: self.zoom(2.0)).pack(side="left")
+        tk.Button(bar, text="Arrows /2", command=lambda: self.zoom(0.5)).pack(side="left")
+        self.canvas = tk.Canvas(self.win, width=self.w, height=self.h, bg="white")
+        self.canvas.pack(fill="both", expand=True)
+        self._last = 0.0
+
+    def select(self, j: int) -> None:
+        self.hitch = j
+        self.refresh(force=True)
+
+    def zoom(self, f: float) -> None:
+        self.scale = max(0.01, min(5.0, self.scale * f))
+        self.refresh(force=True)
+
+    def refresh(self, force: bool = False) -> None:
+        import time
+        from forceview import draw_forces
+        now = time.time()
+        if not force and now - self._last < REFRESH_S:
+            return
+        self._last = now
+        try:
+            snap = self.sb.force_snapshot(self.hitch)
+            draw_forces(self.canvas, snap, self.scale, self.w, self.h)
+        except Exception:
+            pass

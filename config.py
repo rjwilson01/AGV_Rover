@@ -106,6 +106,7 @@ class AGVConfig:
 
     # --- Tooling / display ---
     launch_plotjuggler: bool = False
+    view_lead_speed_mps: float = 0.0           # --view starting lead speed
     show_bar_overlay: bool = False             # orange (commanded) / green (measured) bar lines drawn over the model
     bar_min_engagement_m: float = 0.10         # minimum rod-in-tube overlap at full extension (build check)
 
@@ -384,6 +385,7 @@ def load_config(
         start_ramp_s=float(c.get("start_ramp_s", 0.0)),
         launch_plotjuggler=bool(sim.get("launch_plotjuggler", False)),
         show_bar_overlay=bool(v.get("show_bar_overlay", False)),
+        view_lead_speed_mps=float(v.get("lead_speed_mps", 0.0)),
         bar_min_engagement_m=float(bars.get("min_engagement_m", 0.10)),
         follow_ideal_path=bool(raw["controller"].get("follow_ideal_path", True)),
         ref_smooth_m=float(raw["controller"].get("ref_smooth_m", 1.0)),

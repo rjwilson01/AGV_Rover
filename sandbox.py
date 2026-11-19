@@ -38,6 +38,8 @@ class Sandbox:
         self.sim_time = 0.0
         self.states = []
         self._last_flags = dict(self.ctl.flags)
+        self.baseline = [None] * max(cfg.num_trailers - 1, 0)      # resting cable sum per hitch (tared at 0.5 s or by the button)
+        self._cable_sum = [0.0] * max(cfg.num_trailers - 1, 0)
 
     # open-loop lead: speed and curvature from the set-points
     def _drive(self, t):
@@ -58,6 +60,7 @@ class Sandbox:
         mujoco.mj_kinematics(model, data)
         quats = [data.body(f"trailer_{i}").xquat for i in range(1, cfg.num_trailers + 1)]
         ir = self.ir.measure(t, quats)
+        self._last_ir = ir
         pos_xy = np.array(data.body("trailer_1").xpos[:2], dtype=float)
         hdg, _, _ = quat_to_euler(quats[0])
         self.controller.sim_time = t
@@ -123,6 +126,40 @@ class Sandbox:
                         calc_cable_len(-y_cmd, -p_ball, r_ball, ys, zs, cfg, rear_bar_m=r_cmd, front_bar_m=f_cmd)
                         - cfg.cable_preload_offset_m)
         ctl.readout = self.readout_text(ir, bar_lengths, bar_yaws, joint_yaws)
+
+    # -- live force diagram data ---------------------------------------------------------------------------------
+    def force_snapshot(self, j: int) -> dict | None:
+        """Forces on hitch j (1-based) from the simulator state: cable tensions, bar axial force, wheel thrust."""
+        from forceview import make_snapshot
+        cfg, data, model = self.cfg, self.data, self.model
+        if not (1 <= j < cfg.num_trailers):
+            return None
+        cable = []
+        for code, _, _ in CORNER_SIGNS:
+            cable.append(abs(float(data.actuator(f"cap_t{j}_t{j + 1}_{code}").force.item())))
+        bar = None
+        if cfg.bar_yaw_control:
+            try:
+                mujoco.mj_rnePostConstraint(model, data)
+                b_id = model.body(f"t{j}_rear_slider").id
+                axis = np.asarray(data.xmat[b_id]).reshape(3, 3)[:, 0]
+                bar = cfg.bar_force_sign * float(np.dot(np.asarray(data.cfrc_int[b_id])[3:], axis))
+            except Exception:
+                bar = None
+        r = cfg.wheel_radius_m
+        thrust = lambda i: (float(data.actuator(f"m_t{i}_l").force.item()) + float(data.actuator(f"m_t{i}_r").force.item())) / r
+        s = sum(cable)
+        self._cable_sum[j - 1] = s
+        if self.baseline[j - 1] is None and float(data.time) >= cfg.retension_baseline_s:
+            self.baseline[j - 1] = s
+        yaw = 0.0
+        if self.states and hasattr(self, "_last_ir"):
+            yaw = float(self._last_ir[j - 1].yaw)
+        return make_snapshot(j, cable, bar, thrust(j), thrust(j + 1), self.baseline[j - 1], cfg.retension_thresh_n, yaw)
+
+    def tare(self) -> None:
+        """Take the current cable sums as the resting values (do this with the hitch relaxed)."""
+        self.baseline = list(self._cable_sum)
 
     def _wheel_names(self):
         return [f"m_t{i}_{s}" for i in range(1, self.cfg.num_trailers + 1) for s in ("l", "r")]

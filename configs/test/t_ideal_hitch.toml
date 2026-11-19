@@ -1,0 +1,11 @@
+# "Ideal" hitch-mechanics rig: nearly massless trailers, no water, light wheels. Use with  --view --base fixed --no-friction.
+# Mass cannot be exactly zero: MuJoCo rejects zero-mass moving bodies, and a near-zero mass against stiff actuators makes the
+# integration stiff. These are the lightest values that stay sensible with the default actuator gains (untested in MuJoCo).
+[test]
+TestName = "ideal light hitch rig"
+[geometry]
+lead_dry_mass_kg = 10.0
+trailer_dry_mass_kg = 10.0
+wheel_mass_kg = 0.5
+[tank_slosh]
+water_liters_per_trailer = 0.0

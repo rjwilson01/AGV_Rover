@@ -89,6 +89,7 @@ post_stop_log_sec = 2.0
 camera_distance_m = 6.0
 camera_azimuth_deg = 90.0
 camera_elevation_deg = -45.0
+lead_speed_mps = 0.0              # --view starts with the lead at this speed (the wheel law's straightening needs v > 0; raise it in the window)
 show_bar_overlay = false           # orange/green debug lines for commanded/measured bar direction
 
 [paths]

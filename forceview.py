@@ -22,7 +22,13 @@ def make_snapshot(hitch, cable_n, bar_n, thrust_ahead_n, thrust_behind_n, baseli
         baseline_n=baseline_n, thresh_n=thresh_n, yaw_rad=yaw_rad,
         net_behind_n=thrust_behind_n + hitch_n,
     )
-    out["compression"] = baseline_n is not None and cs < baseline_n - thresh_n
+    # Compression = the hitch is NET pushed, or the cables have unloaded below their resting value.
+    out["compression"] = (baseline_n is not None and cs < baseline_n - thresh_n) or (bar_n is not None and hitch_n < -thresh_n)
+    # Self-stress: cables pull the trailers together while the bar pushes them apart, and the two cancel in N. A pre-tensioned
+    # hitch has some by design (the resting cable sum); it is a FIGHT when the cables carry far more than that.
+    out["self_stress_n"] = min(cs, -bar_n) if (bar_n is not None and bar_n < 0.0) else 0.0
+    out["fight"] = (baseline_n is not None and bar_n is not None and bar_n < 0.0
+                    and cs > baseline_n + max(thresh_n, 0.5 * baseline_n) and abs(hitch_n) < 0.25 * out["self_stress_n"])
     return out
 
 
@@ -64,7 +70,8 @@ def draw_forces(canvas, snap, scale_px_per_n=0.25, width=720, height=420) -> Non
         w = 1 + 5 * t / tmax
         red = int(min(255, 90 + 165 * t / tmax))
         c.create_line(x1, yy, x2, yy, width=w, fill=f"#{red:02x}3030")
-        c.create_text((x1 + x2) / 2, yy + (-12 if off < 0 else 12), text=f"{code} {t:.0f} N", fill="#c0392b", font=("Helvetica", 9))
+        label = f"{code} {t:.0f} N" if t >= 1.0 else f"{code} SLACK (0 N)"
+        c.create_text((x1 + x2) / 2, yy + (-12 if off < 0 else 12), text=label, fill="#c0392b" if t >= 1.0 else "#888888", font=("Helvetica", 9))
     # hitch force N: on trailer j+1 it pulls forward (+x) when tension; on trailer j it pulls backward
     n = snap["hitch_n"]
     L = _clip(n * scale_px_per_n, lim)
@@ -88,6 +95,10 @@ def draw_forces(canvas, snap, scale_px_per_n=0.25, width=720, height=420) -> Non
     c.create_text(10, height - 14, anchor="sw", fill="#333333",
                   text=("cable sum baseline: learning..." if b is None else
                         f"cable sum {snap['cable_sum_n']:.0f} N vs resting {b:.0f} N (compression below {b - snap['thresh_n']:.0f} N)"))
-    if snap["compression"]:
+    if snap["fight"]:
+        c.create_rectangle(width * 0.12, 34, width * 0.88, 62, fill="#e67e22", outline="")
+        c.create_text(width / 2, 48, fill="white", font=("Helvetica", 12, "bold"),
+                      text=f"INTERNAL FIGHT: cables pull {snap['cable_sum_n']:.0f} N, bar pushes {-snap['bar_n']:.0f} N, they cancel in N")
+    elif snap["compression"]:
         c.create_rectangle(width * 0.25, 34, width * 0.75, 62, fill="#d62728", outline="")
         c.create_text(width / 2, 48, fill="white", font=("Helvetica", 12, "bold"), text="COMPRESSION: hitch is being pushed")

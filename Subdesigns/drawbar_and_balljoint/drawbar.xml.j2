@@ -1,0 +1,91 @@
+<mujoco model="parametric_drawbar_ball_joint">
+  <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
+
+  <option timestep="0.001" gravity="0 0 0" integrator="implicitfast">
+    <flag warmstart="enable"/>
+  </option>
+
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+    <scale forcewidth="0.015" contactwidth="0.02" contactheight="0.02" jointlength="0.06" jointwidth="0.005"/>
+    <rgba force="1 0.2 0.2 1"/>
+  </visual>
+
+  <worldbody>
+    <light pos="0.4 -1.2 2.0" dir="0 0.5 -0.8" diffuse="0.9 0.9 0.9"/>
+    <geom name="floor" type="plane" pos="0 0 -0.35" size="3 3 0.1" rgba="0.90 0.90 0.90 1"/>
+
+    <!-- =================================================================== -->
+    <!-- REAR BASE ANCHOR (Holds Pivot 2 & Measures Transmitted Reactions)   -->
+    <!-- =================================================================== -->
+    <body name="rear_anchor" pos="0 0 0.2">
+      <!-- Small semi-transparent node so force/torque arrows remain unobstructed -->
+      <geom name="rear_housing" type="sphere" pos="0 0 0" size="0.022" rgba="0.20 0.65 0.35 0.45" mass="50.0"/>
+      <site name="rear_reaction_site" pos="0 0 0" size="0.006" rgba="0 1 0 1"/>
+
+      <!-- Pivot 2: True 1-DoF Hinge locked at deg2 -->
+      <body name="pivot2_link" pos="0 0 0" euler="{{ rear_euler }}">
+        <joint name="pivot2_hinge" type="hinge" axis="{{ hinge_axis }}" damping="0.5"/>
+        <geom name="pivot2_pin" type="cylinder" fromto="{{ pin_fromto }}" size="0.007" rgba="0.85 0.30 0.20 0.9" mass="0.2"/>
+
+        <!-- Bar 2 extends along local -X from Pivot 2 to the Ball Joint -->
+        <geom name="bar2_geom" type="capsule" fromto="0 0 0  -{{ "%.6f"|format(l2) }} 0 0" size="0.011" rgba="0.18 0.72 0.55 1" mass="1.0"/>
+        <site name="ball_end_bar2" pos="-{{ "%.6f"|format(l2) }} 0 0" size="0.006" rgba="0 1 1 1"/>
+      </body>
+    </body>
+
+    <!-- =================================================================== -->
+    <!-- FRONT INPUT NODE (Applies External Forces into Pivot 1)             -->
+    <!-- =================================================================== -->
+    <body name="front_node" pos="{{ "%.6f"|format(fx_pos) }} {{ "%.6f"|format(fy_pos) }} {{ "%.6f"|format(fz_pos) }}">
+      <joint name="front_slide_x" type="slide" axis="1 0 0" damping="2.0"/>
+      <joint name="front_slide_y" type="slide" axis="0 1 0" damping="2.0"/>
+      <joint name="front_slide_z" type="slide" axis="0 0 1" damping="2.0"/>
+
+      <geom name="front_housing" type="sphere" pos="0 0 0" size="0.022" rgba="0.25 0.35 0.50 0.45" mass="2.0"/>
+      <site name="force_input_site" pos="0 0 0" size="0.006" rgba="1 0 0 1"/>
+
+      <!-- Pivot 1: True 1-DoF Hinge locked at deg1 -->
+      <body name="pivot1_link" pos="0 0 0" euler="{{ front_euler }}">
+        <joint name="pivot1_hinge" type="hinge" axis="{{ hinge_axis }}" damping="0.5"/>
+        <geom name="pivot1_pin" type="cylinder" fromto="{{ pin_fromto }}" size="0.007" rgba="0.85 0.30 0.20 0.9" mass="0.2"/>
+
+        <!-- Bar 1 extends along local +X from Pivot 1 to the Ball Joint -->
+        <geom name="bar1_geom" type="capsule" fromto="0 0 0  {{ "%.6f"|format(l1) }} 0 0" size="0.011" rgba="0.20 0.58 0.85 1" mass="1.0"/>
+
+        <!-- Central 3-DoF Ball Joint -->
+        <body name="ball_socket_body" pos="{{ "%.6f"|format(l1) }} 0 0">
+          <joint name="center_ball_joint" type="ball" damping="0.05"/>
+          <geom name="ball_visual" type="sphere" pos="0 0 0" size="0.020" rgba="0.95 0.75 0.10 0.85" mass="0.3"/>
+          <site name="ball_end_bar1" pos="0 0 0" size="0.006" rgba="1 0 0 1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- ===================================================================== -->
+  <!-- CONSTRAINTS: Position-Only Spherical Ball Pin + Rigid End Angles      -->
+  <!-- ===================================================================== -->
+  <equality>
+    <connect name="ball_spherical_pin" site1="ball_end_bar1" site2="ball_end_bar2" solref="0.002 1" solimp="0.95 0.99 0.001"/>
+    <joint name="lock_pivot1_angle" joint1="pivot1_hinge" polycoef="0 0 0 0 0" solref="0.002 1"/>
+    <joint name="lock_pivot2_angle" joint1="pivot2_hinge" polycoef="0 0 0 0 0" solref="0.002 1"/>
+    {% if lock_front %}
+    <joint name="lock_front_x" joint1="front_slide_x" polycoef="0 0 0 0 0" solref="0.002 1"/>
+    <joint name="lock_front_y" joint1="front_slide_y" polycoef="0 0 0 0 0" solref="0.002 1"/>
+    <joint name="lock_front_z" joint1="front_slide_z" polycoef="0 0 0 0 0" solref="0.002 1"/>
+    {% endif %}
+  </equality>
+
+  <actuator>
+    <general name="front_force_X" site="force_input_site" gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="-5000 5000"/>
+    <general name="front_force_Y" site="force_input_site" gear="0 1 0 0 0 0" ctrllimited="true" ctrlrange="-5000 5000"/>
+    <general name="front_force_Z" site="force_input_site" gear="0 0 1 0 0 0" ctrllimited="true" ctrlrange="-5000 5000"/>
+  </actuator>
+
+  <sensor>
+    <force  name="ball_joint_force"   site="ball_end_bar1"/>
+    <force  name="rear_pivot2_force"  site="rear_reaction_site"/>
+    <torque name="rear_pivot2_torque" site="rear_reaction_site"/>
+  </sensor>
+</mujoco>

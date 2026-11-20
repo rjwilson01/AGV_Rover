@@ -1,0 +1,102 @@
+<mujoco model="drawbar_ball_joint_loop">
+  <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
+  
+  <option timestep="0.001" gravity="0 0 -9.81" integrator="implicitfast">
+    <!-- Tight solver settings to prevent joint separation under high forces -->
+    <flag warmstart="enable"/>
+  </option>
+
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+    <scale forcewidth="0.03" contactwidth="0.05" contactheight="0.05" jointlength="0.15" jointwidth="0.015"/>
+    <rgba force="1 0.2 0.2 1"/>
+  </visual>
+
+  <worldbody>
+    <light pos="0 -1.5 2.5" dir="0 0.6 -0.8" diffuse="0.9 0.9 0.9"/>
+    <geom name="floor" type="plane" size="2 2 0.1" rgba="0.85 0.85 0.85 1"/>
+
+    <!-- BASE BLOCK: Holds the two opposing 1-DoF pivots -->
+    <body name="base_block" pos="0 0 0.5">
+      <!-- Main structural block -->
+      <geom name="block_geom" type="box" size="0.45 0.12 0.12" rgba="0.25 0.3 0.35 1" mass="50"/>
+      
+      <!-- Left Pivot Mount (Pivot 1) at X = -0.4m -->
+      <geom name="mount_left" type="box" pos="-0.4 0 0.16" size="0.04 0.06 0.04" rgba="0.4 0.45 0.5 1"/>
+      
+      <!-- Right Pivot Mount (Pivot 2) at X = +0.4m, facing Pivot 1 -->
+      <geom name="mount_right" type="box" pos="0.4 0 0.16" size="0.04 0.06 0.04" rgba="0.4 0.45 0.5 1"/>
+      
+      <!-- Site for Pivot 2 closure & force measurement (On the base block) -->
+      <site name="pivot2_base_site" pos="0.4 0 0.18" size="0.015" rgba="0 1 0 1"/>
+
+      <!-- ========================================================= -->
+      <!-- KINEMATIC CHAIN START: PIVOT 1 (1-DoF Hinge) -> BAR 1     -->
+      <!-- ========================================================= -->
+      <body name="bar1" pos="-0.4 0 0.18">
+        <!-- 1-DoF Hinge Pivot (Y-axis allows up/down pitch; change axis="0 0 1" for yaw) -->
+        <joint name="pivot1_hinge" type="hinge" axis="0 1 0" damping="0.5"/>
+        
+        <!-- Sensor site at Pivot 1 -->
+        <site name="pivot1_sensor_site" pos="0 0 0" size="0.015" rgba="1 0.5 0 1"/>
+        
+        <!-- Bar 1 Geometry: Extends +0.4m along X toward the center -->
+        <geom name="bar1_geom" type="capsule" fromto="0 0 0  0.4 0 0" size="0.022" rgba="0.2 0.6 0.85 1" mass="2.0"/>
+
+        <!-- ========================================================= -->
+        <!-- CENTRAL BALL JOINT (3-DoF Spherical) -> BAR 2             -->
+        <!-- ========================================================= -->
+        <body name="bar2" pos="0.4 0 0">
+          <!-- 3-DoF Ball Joint connecting Bar 1 and Bar 2 -->
+          <joint name="center_ball_joint" type="ball" damping="0.2"/>
+          
+          <!-- Visual sphere representing the ball joint housing -->
+          <geom name="ball_visual" type="sphere" pos="0 0 0" size="0.038" rgba="0.9 0.7 0.1 1" mass="0.5"/>
+          
+          <!-- Sensor site directly inside the Ball Joint -->
+          <site name="ball_joint_site" pos="0 0 0" size="0.015" rgba="1 0 0 1"/>
+
+          <!-- Bar 2 Geometry: Extends +0.4m along X to meet Pivot 2 -->
+          <geom name="bar2_geom" type="capsule" fromto="0 0 0  0.4 0 0" size="0.022" rgba="0.2 0.75 0.55 1" mass="2.0"/>
+
+          <!-- Site at the tip of Bar 2 where it meets Pivot 2 -->
+          <site name="pivot2_bar_site" pos="0.4 0 0" size="0.015" rgba="0 1 1 1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- ========================================================= -->
+  <!-- LOOP CLOSURE: Connects Bar 2 back to Pivot 2 on Base      -->
+  <!-- ========================================================= -->
+  <equality>
+    <!-- Pins pivot2_bar_site to pivot2_base_site (transmits 3D linear reaction forces) -->
+    <connect name="pivot2_loop_closure" site1="pivot2_bar_site" site2="pivot2_base_site" solref="0.002 1" solimp="0.95 0.99 0.001"/>
+  </equality>
+
+  <!-- ========================================================= -->
+  <!-- ACTUATORS: Apply external forces directly to the Ball     -->
+  <!-- ========================================================= -->
+  <actuator>
+    <!-- Apply X (Axial/Tension-Compression), Y (Lateral/Side), and Z (Vertical) forces at the Ball Joint -->
+    <general name="apply_force_X" site="ball_joint_site" gear="1 0 0 0 0 0" ctrllimited="true" ctrlrange="-1000 1000"/>
+    <general name="apply_force_Y" site="ball_joint_site" gear="0 1 0 0 0 0" ctrllimited="true" ctrlrange="-1000 1000"/>
+    <general name="apply_force_Z" site="ball_joint_site" gear="0 0 1 0 0 0" ctrllimited="true" ctrlrange="-1000 1000"/>
+  </actuator>
+
+  <!-- ========================================================= -->
+  <!-- SENSORS: Read transmitted forces at Pivot 1, Ball, Pivot 2-->
+  <!-- ========================================================= -->
+  <sensor>
+    <!-- Reaction forces at Pivot 1 -->
+    <force name="pivot1_force" site="pivot1_sensor_site"/>
+    <torque name="pivot1_torque" site="pivot1_sensor_site"/>
+
+    <!-- Forces passing through the central Ball Joint -->
+    <force name="ball_joint_force" site="ball_joint_site"/>
+    <torque name="ball_joint_torque" site="ball_joint_site"/>
+
+    <!-- Reaction forces transmitted into Pivot 2 on the base block -->
+    <force name="pivot2_force" site="pivot2_bar_site"/>
+  </sensor>
+</mujoco>

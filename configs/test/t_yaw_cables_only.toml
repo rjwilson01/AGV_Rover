@@ -1,0 +1,7 @@
+# Cables at bar height: the top and bottom anchors coincide (z = 0), so the four cables become two yaw-only pairs.
+# Cable length then barely depends on ball pitch/roll (about 4 mm and 1 mm per 10 deg instead of ~30 mm for pitch), but the
+# cables no longer restrain pitch or roll at all. Compare the return leg and cable tensions against t_real_layout.
+[test]
+TestName = "yaw-only cables (anchors at bar height)"
+[geometry]
+cable_anchor_z_m = 0.0

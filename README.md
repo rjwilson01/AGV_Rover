@@ -385,6 +385,7 @@ Parameters that exist only in `[mass_layout]` when set: `battery_z_m` (battery h
 | `t_w35_p03` | Wheels 0.35 m, axle +0.03 (clearance 0.20). Wheels 0.35 m, axle 0.03 m ABOVE the chassis centre: body height 0.32 m, chassis clearance 0.20 m (= original). | geometry.wheel_radius_m=0.35, geometry.wheel_z_offset_m=0.03 |
 | `t_wheel_ir` | Wheel speeds from IR yaw. Follower wheel speeds from the MEASURED joint yaw (IR camera) via the hitch kinematics, instead of from the commanded yaw. Lead follows the pure-pursuit curvature. | controller.wheel_speed_from_ir=true |
 | `t_wide_uturn` | Wider U-turn (radius >= ~3.4 m) that the hitch-limited planner can follow without saturating. | controller.active_path="u_turn_wide" |
+| `t_yaw_cables_only` | yaw-only cables (anchors at bar height). Cables at bar height: the top and bottom anchors coincide (z = 0), so the four cables become two yaw-only pairs. Cable length then barely depends on ball pitch/roll (about 4 mm and 1 mm per 10 deg instead of ~30 mm for pitch), but the cables no longer restrain pitch or roll at all. Compare the return leg and cable tensions against t_real_layout. | geometry.cable_anchor_z_m=0.0 |
 | `t_yaw_flip` | Yaw command sign flipped. Flip the sign of the commanded hinge/ball yaw. The planar kinematics say a follower's yaw relative to its leader is NEGATIVE in a left turn, but the controller yaw is positive for a left turn and was sent to the hinges unchanged, bending the hitch the wrong way. | controller.joint_yaw_sign=-1.0 |
 <!-- END:tests -->
 
@@ -416,6 +417,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Test file `t_yaw_cables_only` (`geometry.cable_anchor_z_m = 0`): the top and bottom cable anchors coincide at bar height, so the four cables act as two yaw-only pairs and cable length no longer depends on ball pitch/roll. Not run yet.
 * PlotJuggler layout file renamed `pj_auto_layout.pj4.xml`: PlotJuggler 4's Load Layout dialog only accepts `*.pj4.xml`, so the old `pj_auto_layout.xml` could not be picked in the dialog (delete the old file).
 * FIX: reversing. The follower wheel law clamped every follower speed to be positive, so with the lead in reverse the trailers still rolled forwards and bunched up (found in the `--view` sandbox). The clamp now follows the sign of the lead speed. `--plotjuggler` is ignored in `--view` (the sandbox streams no telemetry); a message now says so.
 * `Makefile` (GNU make, e.g. `winget install ezwinports.make`): `make docs` regenerates the README auto sections and both drawio diagrams; also `make compile`, `selfcheck`, `view`, `clean-logs`; `make PYTHON=py docs` to change the interpreter.

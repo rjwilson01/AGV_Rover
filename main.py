@@ -14,6 +14,7 @@ from config import cg_above_axle_m, config_diff, load_config
 from cli import build_parser
 from drive_profile import parse_drive
 from gnss import GNSSModel
+from navfilter import LeadNav, wrap as wrap_angle
 from imu import IMUModel
 from loadcell import LoadCell
 from safeguard import FollowerGuard, RetensionGuard
@@ -179,6 +180,11 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
     bar_cells = [LoadCell(cfg, 100 + ch) for ch in range(cfg.num_trailers - 1)]
     cable_sums_meas = [0.0] * (cfg.num_trailers - 1)
     gnss_model = GNSSModel(cfg) if cfg.gnss_enabled else None
+    nav = LeadNav(cfg) if cfg.nav_gnss_in_loop else None
+    if nav is not None and gnss_model is None:
+        print("[Sim] nav.gnss_in_loop needs gnss.enabled = true: using the true pose instead")
+        nav = None
+    v_hint = 0.0                                          # signed lead speed from wheel odometry, last step
 
     wheel_names = [
         f"m_t{i}_{side}"
@@ -239,6 +245,9 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 cable_sums_meas = [0.0] * (cfg.num_trailers - 1)
                 if gnss_model is not None:
                     gnss_model.reset()
+                if nav is not None:
+                    nav.reset()
+                v_hint = 0.0
                 apply_neutral_controls()
             prev_sim_time = data.time
 
@@ -263,7 +272,13 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                 )
 
             controller.sim_time = t
-            wheel_vels, joint_yaws, bar_lengths = controller.step(pos_xy, lead_hdg, ir_readings=ir_readings)
+            true_vel = data.joint("root_jnt").qvel[:2]
+            gnss = gnss_model.measure(t, pos_xy, true_vel) if gnss_model is not None else None
+            nav_pos, nav_hdg = pos_xy, lead_hdg
+            if nav is not None:
+                gyro_z = imu_readings[0].gyro[2] if imu_readings else None
+                nav_pos, nav_hdg = nav.update(t, gnss, gyro_z, v_hint, pos_xy, lead_hdg)
+            wheel_vels, joint_yaws, bar_lengths = controller.step(nav_pos, nav_hdg, ir_readings=ir_readings)
             # Controller yaws already carry the physical sign (yaw_gain < 0: a follower's yaw relative to its leader is
             # negative in a left turn). joint_yaw_sign is kept only as a debugging switch (1.0 = no change).
             # Everything downstream (actuators, overlay, telemetry cmd-vs-meas) works in physical yaw.
@@ -273,8 +288,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
             ramp = min(1.0, t / cfg.start_ramp_s) if cfg.start_ramp_s > 0.0 else 1.0
             # Stall guard: lead commanded vs actual speed (stand-in for lead odometry / GNSS speed)
             v_lead_cmd = abs(0.5 * (wheel_vels[0] + wheel_vels[1])) * cfg.wheel_radius_m * ramp
-            true_vel = data.joint("root_jnt").qvel[:2]
-            gnss = gnss_model.measure(t, pos_xy, true_vel) if gnss_model is not None else None
+            v_hint = 0.5 * (wheel_vels[0] + wheel_vels[1]) * cfg.wheel_radius_m * ramp
             if gnss is None:
                 v_lead_meas = float(np.hypot(*true_vel))      # no GNSS modelled: ideal speed
             elif gnss.valid:
@@ -398,6 +412,10 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
 
             extra_metrics = controller.get_telemetry()
             extra_metrics.update(lc_metrics)
+            if nav is not None:
+                extra_metrics["nav/pos_err_m"] = round(float(np.hypot(*(nav_pos - np.asarray(pos_xy)[:2]))), 3)
+                extra_metrics["nav/hdg_err_deg"] = round(float(np.rad2deg(wrap_angle(nav_hdg - lead_hdg))), 3)
+                extra_metrics["nav/fix_valid"] = int(nav.fix_valid)
             extra_metrics["guard/follower_scale"] = round(guard_scale, 3)
             extra_metrics["guard/lead_speed_cmd_mps"] = round(v_lead_cmd, 3)
             extra_metrics["guard/lead_speed_meas_mps"] = round(v_lead_meas, 3)

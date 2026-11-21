@@ -1,0 +1,6 @@
+# The controller is told the lead's position and heading from the simulated RTK GNSS + gyro + odometry (navfilter.py)
+# instead of the true pose. Compare the tail swing and path error with the same run without this file.
+[test]
+TestName = "GNSS in the loop (RTK)"
+[nav]
+gnss_in_loop = true

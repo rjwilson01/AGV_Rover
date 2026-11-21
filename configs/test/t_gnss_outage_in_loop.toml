@@ -1,0 +1,8 @@
+# GNSS in the loop with the fix lost from 8 s to 12 s: dead reckoning on odometry and the gyro (the gyro drifts).
+[test]
+TestName = "GNSS in the loop, fix lost 8-12 s"
+duration_s = 20
+[nav]
+gnss_in_loop = true
+[gnss]
+outages_s = [[8.0, 12.0]]

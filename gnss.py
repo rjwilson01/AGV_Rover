@@ -17,6 +17,7 @@ class GNSSReading(NamedTuple):
     vy: float
     speed: float
     valid: bool
+    t: float = 0.0          # when the receiver produced this fix (the data is `latency_s` older)
 
 
 class GNSSModel:
@@ -55,5 +56,5 @@ class GNSSModel:
         _, p, v = self._buf[0]
         p = p + self.bias + self.rng.normal(0.0, c.gnss_pos_noise_m, 2)
         v = v + self.rng.normal(0.0, c.gnss_vel_noise_mps, 2)
-        self._held = GNSSReading(float(p[0]), float(p[1]), float(v[0]), float(v[1]), float(np.hypot(*v)), True)
+        self._held = GNSSReading(float(p[0]), float(p[1]), float(v[0]), float(v[1]), float(np.hypot(*v)), True, float(t))
         return self._held

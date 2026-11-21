@@ -158,7 +158,7 @@ bar_enabled = false        # optional bar axial-force reading, computed from the
 bar_force_sign = 1.0       # -1 if a pull on the hitch reads negative (confirm with a tow test; compare_loads.py reports the slope sign)
 
 [gnss]
-# Lead-trailer RTK GNSS (u-blox ZED-F9P class). Used for the lead speed seen by the follower stall guard.
+# Lead-trailer RTK GNSS (u-blox ZED-F9P class). Feeds the follower stall guard's speed; with [nav] gnss_in_loop = true it also gives the controller its position and heading.
 enabled = true
 rate_hz = 10
 latency_s = 0.1
@@ -168,6 +168,14 @@ bias_tau_s = 10.0
 vel_noise_mps = 0.05
 outages_s = []             # e.g. [[10.0, 14.0]] = no fix from t=10 to 14 s
 seed = 2
+
+[nav]
+# What the controller is told about the lead trailer's position and heading (see navfilter.py).
+gnss_in_loop = false        # false: the simulator's true pose (ideal). true: the GNSS + gyro + odometry estimate
+use_gyro = true             # heading from the lead's gyro, corrected by the GNSS course; false = course only
+min_course_speed_mps = 0.15 # below this speed the GNSS course is ignored (too noisy)
+course_tau_s = 2.0          # how fast the GNSS course corrects the gyro heading
+pos_gain = 0.5              # share of each GNSS fix blended into the position estimate
 
 [ir_camera]
 # Simulated IR camera: relative roll/pitch/yaw of trailer j+1 in trailer j's frame. Defaults are a PERFECT sensor.

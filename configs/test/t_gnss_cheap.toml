@@ -1,0 +1,11 @@
+# GNSS in the loop with a cheap standalone receiver (10-30 cm class): 10 cm white noise plus a 20 cm slowly wandering bias.
+# The bias moves the whole path sideways (the train keeps its shape); the white noise is what disturbs the steering.
+[test]
+TestName = "GNSS in the loop, cheap receiver (10-30 cm)"
+[nav]
+gnss_in_loop = true
+[gnss]
+pos_noise_m = 0.10
+bias_m = 0.20
+bias_tau_s = 30.0
+vel_noise_mps = 0.10

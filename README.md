@@ -111,6 +111,13 @@ Example: `20-t_real_layout,t_w35_p03,20+t_wide_uturn`.
 
 ## 3. How the control works
 
+* **What the controller is told about the lead:** by default the simulator's TRUE position and heading (ideal). With
+  `[nav] gnss_in_loop = true` (test files `t_gnss_in_loop`, `t_gnss_cheap`, `t_gnss_outage_in_loop`) it gets `navfilter.py`'s
+  estimate instead: position dead-reckoned on wheel odometry and pulled towards each GNSS fix (latency-compensated); heading from the
+  lead's gyro, corrected by the GNSS course over ground (flipped in reverse), with the gyro offset learned online. A lost fix is
+  dead-reckoned. Channels `nav/pos_err_m`, `nav/hdg_err_deg`, `nav/fix_valid` log the estimate's error; `pose/x_m`, `pose/y_m`
+  stay the TRUTH, so the path error then includes the sensor error. Start-up alignment is taken from the true pose; skid (course
+  not equal to heading) and the antenna lever arm are not modelled.
 * **Lead steering:** pure pursuit on the planned path. Lookahead = max(`lookahead_dist_m`, `lookahead_gain_s` × speed).
   The curvature is low-passed and slew-limited in the distance domain (`curv_filter_m`, `curv_rate_limit_per_m`).
 * **Path planner:** rounds waypoint corners with arcs and caps curvature at what the hitches can follow
@@ -324,7 +331,7 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 
 | Key | Default | Variable | Fixed | Description |
 |---|---|---|---|---|
-| `enabled` | true |  |  | Lead-trailer RTK GNSS (u-blox ZED-F9P class). Used for the lead speed seen by the follower stall guard. |
+| `enabled` | true |  |  | Lead-trailer RTK GNSS (u-blox ZED-F9P class). Feeds the follower stall guard's speed; with [nav] gnss_in_loop = true it also gives the controller its position and heading. |
 | `rate_hz` | 10 |  |  |  |
 | `latency_s` | 0.1 |  |  |  |
 | `pos_noise_m` | 0.014 |  |  |  |
@@ -333,6 +340,16 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `vel_noise_mps` | 0.05 |  |  |  |
 | `outages_s` | [] |  |  | e.g. [[10.0, 14.0]] = no fix from t=10 to 14 s |
 | `seed` | 2 |  |  |  |
+
+### `[nav]`
+
+| Key | Default | Variable | Fixed | Description |
+|---|---|---|---|---|
+| `gnss_in_loop` | false |  |  | false: the simulator's true pose (ideal). true: the GNSS + gyro + odometry estimate |
+| `use_gyro` | true |  |  | heading from the lead's gyro, corrected by the GNSS course; false = course only |
+| `min_course_speed_mps` | 0.15 |  |  | below this speed the GNSS course is ignored (too noisy) |
+| `course_tau_s` | 2.0 |  |  | how fast the GNSS course corrects the gyro heading |
+| `pos_gain` | 0.5 |  |  | share of each GNSS fix blended into the position estimate |
 
 ### `[ir_camera]`
 
@@ -399,7 +416,10 @@ Parameters that exist only in `[mass_layout]` when set: `battery_z_m` (battery h
 | `t_big_wheels_r30` | Wheels 0.30 m, axle +0.08 (CG below axle, 0.10 m clearance). Same idea as t_big_wheels_stable but with ground clearance for the 5 cm ruts (chassis bottom was only 0.05 m up and snagged on them). Radius 0.30, axle +0.08 above the chassis centre: body height 0.22 m, chassis bottom 0.10 m off the ground, CG ~0.04 m below the axle. | geometry.wheel_radius_m=0.30, geometry.wheel_z_offset_m=0.08 |
 | `t_big_wheels_stable` | Wheels 0.25 m, axle +0.08 (CG below axle). Each cart's CG is ~0.04 m above the chassis centre; the default axle is 0.14 m BELOW it, so a cart is an inverted pendulum. Bigger wheels let the axle sit ABOVE the CG without the chassis touching the ground: body height = radius - offset = 0.17 m, chassis bottom 0.05 m off the ground, CG ~0.04 m below the axle. | geometry.wheel_radius_m=0.25, geometry.wheel_z_offset_m=0.08 |
 | `t_follow_lead_history` | Old follower reference: replay the lead's own steering history instead of the smooth planned path (A/B). | controller.follow_ideal_path=false |
+| `t_gnss_cheap` | GNSS in the loop, cheap receiver (10-30 cm). GNSS in the loop with a cheap standalone receiver (10-30 cm class): 10 cm white noise plus a 20 cm slowly wandering bias. The bias moves the whole path sideways (the train keeps its shape); the white noise is what disturbs the steering. | nav.gnss_in_loop=true, gnss.pos_noise_m=0.10, gnss.bias_m=0.20, gnss.bias_tau_s=30.0, gnss.vel_noise_mps=0.10 |
+| `t_gnss_in_loop` | GNSS in the loop (RTK). The controller is told the lead's position and heading from the simulated RTK GNSS + gyro + odometry (navfilter.py) instead of the true pose. Compare the tail swing and path error with the same run without this file. | nav.gnss_in_loop=true |
 | `t_gnss_outage` | Lead GNSS fix lost 8-12 s: guard must hold (not trip) and the run should carry on. | gnss.outages_s=[[8.0, 12.0]] |
+| `t_gnss_outage_in_loop` | GNSS in the loop, fix lost 8-12 s. GNSS in the loop with the fix lost from 8 s to 12 s: dead reckoning on odometry and the gyro (the gyro drifts). | nav.gnss_in_loop=true, gnss.outages_s=[[8.0, 12.0]] |
 | `t_ideal_hitch` | ideal light hitch rig. "Ideal" hitch-mechanics rig: nearly massless trailers, no water, light wheels. Use with  --view --base fixed --no-friction. Mass cannot be exactly zero: MuJoCo rejects zero-mass moving bodies, and a near-zero mass against stiff actuators makes the integration stiff. These are the lightest values that stay sensible with the default actuator gains (untested in MuJoCo). | geometry.lead_dry_mass_kg=10.0, geometry.trailer_dry_mass_kg=10.0, geometry.wheel_mass_kg=0.5, tank_slosh.water_liters_per_trailer=0.0 |
 | `t_ideal_sensors` | Stage 1: perfect instruments. Any steering/path-following problem seen with this file is a control or physics problem, not a sensor problem. | ir_camera.noise_std_deg=0.0, ir_camera.latency_s=0.0, ir_camera.quantization_deg=0.0, imu.acc_noise_ug_rthz=[0.0, 0.0, 0.0], imu.acc_offset… |
 | `t_no_dev` | Return-leg experiment: followers follow the pure ideal path (no share of the lead's deviation from it). | controller.ref_dev_gain=0.0 |
@@ -450,6 +470,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* **GNSS in the loop**: `[nav] gnss_in_loop` feeds the controller a GNSS + gyro + odometry estimate (`navfilter.py`) instead of the true lead pose, so receiver noise, bias, latency, outages and gyro drift show up in the path tracking and the tail swing. New test files `t_gnss_in_loop`, `t_gnss_cheap` (10 cm noise + 20 cm bias), `t_gnss_outage_in_loop`; new channels `nav/*`; the lead IMU gyro is now used (it was only logged). Off by default. Stand-in tested (synthetic run: RTK about 4 cm / 3 deg worst case, cheap about 50 cm / 5 deg, outage 10 s about 10 cm); not run in MuJoCo.
 * `--view`: **Pause on compression** tick box (`viewer.pause_on_compression`, default off). The physics freezes the moment any hitch is pushed (the force window's compression test, after the resting-tension baseline is known) and says which hitch; Space resumes with a 1 s grace.
 * `--view` gains a Config-files window (tick/order test files, conflicts, save as a test file), a Parameters window (LIVE vs XML-RELOAD lists, edit, source, undo, unused keys) with a **Reload XML** button and an out-of-date warning, and `viewer.show_*_window` switches (all on by default). New `configsession.py`. Hard-coded constants moved into TOML (XML unchanged at the defaults): `simulation.timestep_s/integrator/gravity_mps2`, `terrain.ground_friction`, `actuators.bar_slide_damping/cable_damping/cable_width_m`, `controller.follower_max_speed_frac/follower_max_yaw_rate`. Stand-in tested only (no Tk or MuJoCo in the cloud copy).
 * Test file `t_yaw_cables_only` (`geometry.cable_anchor_z_m = 0`): the top and bottom cable anchors coincide at bar height, so the four cables act as two yaw-only pairs and cable length no longer depends on ball pitch/roll. Not run yet.

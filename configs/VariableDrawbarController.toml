@@ -19,7 +19,7 @@ ball_joint_limit_deg = 55.0
 # physical convention applies: yaw_gain < 0 already makes the follower yaw negative in a left turn.
 joint_yaw_sign = 1.0           # follower yaw relative to its leader is negative in a left turn
 wheel_speed_from_ir = true     # follower wheel speeds from the measured (IR) joint yaw and hitch kinematics
-active_path = "u_turn_180"
+active_path = "u_turn_orchard"
 v_center_mps = 1.05
 lookahead_dist_m = 1.60
 max_curvature = 0.55

@@ -1,0 +1,160 @@
+
+import FreeCAD as App
+import Part
+import math
+
+# ==============================================================================
+# PARAMETRIC CONFIGURATION (M10 Heim Joints + M16 Hex Coupling Nut)
+# ==============================================================================
+SHOW_CUTAWAY = True  # Set to False for full solid outer coupling nut
+
+# Coupling Nut (M16 x 50mm long, 24mm Across Flats)
+NUT_AF = 24.0
+NUT_LEN = 50.0
+M16_MAJOR_DIA = 16.0
+M16_MINOR_DIA = 14.0
+
+# Stepped Drilling Dimensions inside M16 Coupling Nut (Z = 0 is bottom, Z = 50 is top)
+Z_BOTTOM_THREAD_END = 16.0   # 0 to 16mm: Untouched M16 thread for reducer bushing
+Z_THRUST_BOT_END    = 22.0   # 16 to 22mm: 18.2mm pocket for Bottom Thrust Bearing + Nyloc
+Z_STEP_END          = 28.0   # 22 to 28mm: 12.0mm bore (6mm thick solid internal steel shelf)
+# 28 to 50mm: 18.2mm top pocket for Top Thrust Bearing
+
+BORE_BEARING_DIA = 18.2      # Clearance for 18mm OD thrust bearings
+BORE_STEP_DIA    = 12.0      # Bore through internal shelf for bronze sleeve bushing
+
+# Bearings & Bushing (Standard 10mm ID x 18mm OD)
+SHAFT_DIA        = 10.0
+BEARING_OD       = 18.0
+BEARING_THICK    = 5.5       # Standard F10-18M axial thrust bearing thickness
+BUSHING_OD       = 12.0
+BUSHING_LEN      = 6.0
+
+# Nyloc Nut (M10)
+NYLOC_AF         = 17.0
+NYLOC_THICK      = 8.0
+
+# ==============================================================================
+# HELPER FUNCTIONS
+# ==============================================================================
+def make_hex_prism(af, height, z_offset=0.0):
+    radius = af / math.sqrt(3.0)
+    pts = []
+    for i in range(6):
+        angle = math.radians(60 * i + 30)
+        pts.append(App.Vector(radius * math.cos(angle), radius * math.sin(angle), z_offset))
+    pts.append(pts[0])
+    wire = Part.makePolygon(pts)
+    face = Part.Face(wire)
+    return face.extrude(App.Vector(0, 0, height))
+
+def make_tube(od, id_val, height, z_offset=0.0):
+    outer = Part.makeCylinder(od / 2.0, height, App.Vector(0, 0, z_offset))
+    if id_val > 0:
+        inner = Part.makeCylinder(id_val / 2.0, height, App.Vector(0, 0, z_offset))
+        return outer.cut(inner)
+    return outer
+
+def make_heim_joint(z_shank_start, z_shank_end, eye_axis="Y"):
+    """Creates a simplified male Heim joint from shank end to spherical eye center."""
+    shank_len = abs(z_shank_end - z_shank_start)
+    z_min = min(z_shank_start, z_shank_end)
+    shank = Part.makeCylinder(SHAFT_DIA / 2.0, shank_len, App.Vector(0, 0, z_min))
+    
+    # Eye housing
+    eye_center = App.Vector(0, 0, z_shank_end)
+    axis_vec = App.Vector(0, 1, 0) if eye_axis == "Y" else App.Vector(1, 0, 0)
+    eye_offset = App.Vector(0, -7.0, z_shank_end) if eye_axis == "Y" else App.Vector(-7.0, 0, z_shank_end)
+    
+    eye_outer = Part.makeCylinder(14.0, 14.0, eye_offset, axis_vec)
+    ball = Part.makeSphere(11.0, eye_center)
+    bore = Part.makeCylinder(5.0, 24.0, App.Vector(0, -12.0, z_shank_end) if eye_axis == "Y" else App.Vector(-12.0, 0, z_shank_end), axis_vec)
+    
+    heim = shank.fuse(eye_outer).fuse(ball).cut(bore)
+    return heim
+
+def add_part(doc, name, shape, color, transparency=0):
+    obj = doc.addObject("Part::Feature", name)
+    obj.Shape = shape
+    if App.GuiUp:
+        obj.ViewObject.ShapeColor = color
+        obj.ViewObject.Transparency = transparency
+    return obj
+
+# ==============================================================================
+# BUILD ASSEMBLY
+# ==============================================================================
+doc = App.newDocument("Swivel_Coupling_Assembly")
+
+# 1. Stepped M16 Coupling Nut
+nut_body = make_hex_prism(NUT_AF, NUT_LEN, 0.0)
+# Cut bottom M16 thread minor bore (0 to 16mm)
+cut_m16 = Part.makeCylinder(M16_MINOR_DIA / 2.0, Z_BOTTOM_THREAD_END, App.Vector(0, 0, 0))
+# Cut bottom bearing/nyloc pocket (8 to 22mm) - overlaps into top of M16 region for nyloc clearance
+cut_bot_pocket = Part.makeCylinder(BORE_BEARING_DIA / 2.0, Z_THRUST_BOT_END - 8.0, App.Vector(0, 0, 8.0))
+# Cut middle step bore (22 to 28mm)
+cut_step = Part.makeCylinder(BORE_STEP_DIA / 2.0, Z_STEP_END - Z_THRUST_BOT_END, App.Vector(0, 0, Z_THRUST_BOT_END))
+# Cut top bearing pocket (28 to 50mm)
+cut_top_pocket = Part.makeCylinder(BORE_BEARING_DIA / 2.0, NUT_LEN - Z_STEP_END, App.Vector(0, 0, Z_STEP_END))
+
+coupling_nut = nut_body.cut(cut_m16).cut(cut_bot_pocket).cut(cut_step).cut(cut_top_pocket)
+
+if SHOW_CUTAWAY:
+    # Slice front half (-Y side) away to reveal internal step and bearings
+    cut_box = Part.makeBox(60.0, 30.0, 70.0, App.Vector(-30.0, -30.0, -10.0))
+    coupling_nut = coupling_nut.cut(cut_box)
+
+add_part(doc, "01_M16_Coupling_Nut_Drilled", coupling_nut, (0.55, 0.58, 0.62))
+
+# 2. Bronze Sleeve Bushing inside Internal Step (Z = 22 to 28mm)
+bushing = make_tube(BUSHING_OD, SHAFT_DIA, BUSHING_LEN, Z_THRUST_BOT_END)
+add_part(doc, "02_Bronze_Sleeve_Bushing", bushing, (0.85, 0.62, 0.20))
+
+# 3. Top Axial Thrust Bearing (Z = 28 to 33.5mm - Compression Load)
+# Modeled as lower washer + ball cage + upper washer
+t1_bot = make_tube(BEARING_OD, SHAFT_DIA + 0.2, 1.5, Z_STEP_END)
+t1_mid = make_tube(BEARING_OD - 0.5, SHAFT_DIA + 1.0, 2.5, Z_STEP_END + 1.5)
+t1_top = make_tube(BEARING_OD, SHAFT_DIA, 1.5, Z_STEP_END + 4.0)
+thrust_top = t1_bot.fuse(t1_mid).fuse(t1_top)
+add_part(doc, "03_Thrust_Bearing_Top_Compression", thrust_top, (0.20, 0.55, 0.85))
+
+# 4. Bottom Axial Thrust Bearing (Z = 16.5 to 22mm - Tension Load)
+z_t2 = Z_THRUST_BOT_END - BEARING_THICK
+t2_bot = make_tube(BEARING_OD, SHAFT_DIA, 1.5, z_t2)
+t2_mid = make_tube(BEARING_OD - 0.5, SHAFT_DIA + 1.0, 2.5, z_t2 + 1.5)
+t2_top = make_tube(BEARING_OD, SHAFT_DIA + 0.2, 1.5, z_t2 + 4.0)
+thrust_bot = t2_bot.fuse(t2_mid).fuse(t2_top)
+add_part(doc, "04_Thrust_Bearing_Bot_Tension", thrust_bot, (0.20, 0.55, 0.85))
+
+# 5. M10 Nyloc Nut (Z = 8.5 to 16.5mm - Torqued tight against Bottom Thrust Bearing)
+z_nyloc = z_t2 - NYLOC_THICK
+nyloc = make_hex_prism(NYLOC_AF, NYLOC_THICK, z_nyloc).cut(
+    Part.makeCylinder(SHAFT_DIA / 2.0, NYLOC_THICK, App.Vector(0, 0, z_nyloc))
+)
+add_part(doc, "05_M10_Nyloc_Locknut", nyloc, (0.25, 0.70, 0.35))
+
+# 6. Rotating Heim Joint 1 (Top - Shaft extends from Z = 7.5mm up to Eye at Z = 72mm)
+heim_1 = make_heim_joint(z_nyloc - 1.0, 72.0, eye_axis="Y")
+add_part(doc, "06_Heim_Joint_1_Rotating", heim_1, (0.78, 0.80, 0.82))
+
+# 7. M16-to-M10 Thread Reducer Bushing (Z = -2 to 8mm)
+reducer = make_tube(M16_MAJOR_DIA, SHAFT_DIA, 10.0, -2.0)
+if SHOW_CUTAWAY:
+    cut_box_red = Part.makeBox(60.0, 30.0, 70.0, App.Vector(-30.0, -30.0, -10.0))
+    reducer = reducer.cut(cut_box_red)
+add_part(doc, "07_M16_to_M10_Thread_Reducer", reducer, (0.80, 0.35, 0.25))
+
+# 8. Fixed Heim Joint 2 (Bottom - Shaft threads into reducer up to Z = 7mm, Eye at Z = -28mm)
+heim_2 = make_heim_joint(7.0, -28.0, eye_axis="X")
+add_part(doc, "08_Heim_Joint_2_Fixed", heim_2, (0.78, 0.80, 0.82))
+
+# 9. M10 Jam Nut locking Heim Joint 2 against Reducer (Z = -7 to -2mm)
+jam_nut = make_hex_prism(NYLOC_AF, 5.0, -7.0).cut(
+    Part.makeCylinder(SHAFT_DIA / 2.0, 5.0, App.Vector(0, 0, -7.0))
+)
+add_part(doc, "09_M10_Jam_Nut", jam_nut, (0.45, 0.48, 0.52))
+
+doc.recompute()
+if App.GuiUp:
+    App.Gui.activeDocument().activeView().viewIsometric()
+    App.Gui.SendMsgToActiveView("ViewFit")

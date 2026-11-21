@@ -1,0 +1,138 @@
+
+<mujoco model="dual_bar_swivel_coupling">
+  <compiler angle="degree" coordinate="local" inertiafromgeom="true"/>
+  
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast">
+    <flag warmstart="enable"/>
+  </option>
+
+  <visual>
+    <headlight ambient="0.45 0.45 0.45" diffuse="0.8 0.8 0.8"/>
+    <scale jointlength="0.10" jointwidth="0.010" forcewidth="0.008"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.85 0.9 0.95" rgb2="0.2 0.3 0.4" width="512" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.25 0.3" rgb2="0.3 0.35 0.4" width="512" height="512" mark="edge" markrgb="0.8 0.8 0.8"/>
+    <material name="grid_mat" texture="grid" texrepeat="4 4" texuniform="true" reflectance="0.2"/>
+    <material name="steel" rgba="0.72 0.75 0.78 1" specular="0.8" shininess="0.6"/>
+    <material name="coupling_mat" rgba="0.45 0.48 0.52 1" specular="0.7" shininess="0.5"/>
+    <material name="brass" rgba="0.85 0.65 0.2 1" specular="0.8" shininess="0.6"/>
+    <material name="reducer_mat" rgba="0.80 0.35 0.25 1" specular="0.6"/>
+    <material name="fork_mat" rgba="0.22 0.25 0.28 1" specular="0.6"/>
+    <material name="bar1_mat" rgba="0.20 0.45 0.70 1"/>
+    <material name="bar2_mat" rgba="0.85 0.38 0.20 1"/>
+  </asset>
+
+  <worldbody>
+    <geom name="floor" type="plane" size="2 2 0.1" material="grid_mat" pos="0 0 -0.25"/>
+
+    <!-- ==================== BASE PIVOT 1 (Left Anchor) ==================== -->
+    <body name="anchor_1" pos="-0.65 0 0.20">
+      <geom name="base1_block" type="box" size="0.035 0.035 0.035" material="steel"/>
+      
+      <body name="bar1_outer" pos="0 0 0">
+        <joint name="base_pivot_1" type="ball" damping="0.05"/>
+        <geom name="bar1_cyl" type="capsule" fromto="0 0 0 0.32 0 0" size="0.016" material="bar1_mat"/>
+        
+        <!-- Variable Length Bar 1 -->
+        <body name="bar1_inner" pos="0.32 0 0">
+          <joint name="slide_1" type="slide" axis="1 0 0" range="-0.12 0.22" damping="2.0"/>
+          <geom name="bar1_rod" type="capsule" fromto="-0.12 0 0 0.20 0 0" size="0.011" material="steel"/>
+          
+          <!-- ==================== CLEVIS FORK 1 (Horizontal Pin along Y) ==================== -->
+          <body name="fork_1" pos="0.20 0 0">
+            <geom name="fork1_base" type="box" pos="0.008 0 0" size="0.008 0.022 0.014" material="fork_mat"/>
+            <geom name="fork1_ear_left" type="box" pos="0.032 0.015 0" size="0.020 0.004 0.014" material="fork_mat"/>
+            <geom name="fork1_ear_right" type="box" pos="0.032 -0.015 0" size="0.020 0.004 0.014" material="fork_mat"/>
+            <!-- Horizontal Clevis Pin -->
+            <geom name="pin_1_geom" type="cylinder" pos="0.038 0 0" euler="90 0 0" size="0.005 0.022" material="brass"/>
+
+            <!-- ==================== HEIM JOINT 1 (Rotating Side of Swivel) ==================== -->
+            <body name="heim_1_ball" pos="0.038 0 0">
+              <!-- Pitch rotation around Horizontal Clevis Pin (Y) -->
+              <joint name="pin_1_horiz" type="hinge" axis="0 1 0" range="-85 85" damping="0.01"/>
+              <geom name="heim1_sphere" type="sphere" size="0.011" material="brass"/>
+              
+              <body name="heim_1_body" pos="0 0 0">
+                <!-- +/- 15 deg spherical misalignment cone of Heim 1 -->
+                <joint name="heim_1_cone" type="ball" range="0 15" damping="0.05"/>
+                <!-- Eye of Heim 1 (bore along Y) -->
+                <geom name="heim1_eye" type="cylinder" euler="90 0 0" size="0.014 0.007" material="steel"/>
+                <!-- M10 Shank extending into the M16 Coupling Nut (up to X = 0.0645m where Nyloc sits) -->
+                <geom name="heim1_shank" type="cylinder" fromto="0.014 0 0 0.0645 0 0" size="0.005" material="steel"/>
+                <!-- Internal M10 Nyloc Nut inside coupling nut -->
+                <geom name="internal_nyloc" type="cylinder" pos="0.060 0 0" euler="0 90 0" size="0.0085 0.004" material="brass"/>
+
+                <!-- ==================== M16 THRUST-BEARING COUPLING & HEIM 2 (Fixed Side) ==================== -->
+                <!-- Center of internal bronze bushing & thrust bearings is at X = 0.047m from Heim 1 eye -->
+                <body name="coupling_housing_body" pos="0.047 0 0">
+                  <!-- Unconstrained 360-degree axial thrust bearing swivel (compression + tension) -->
+                  <joint name="swivel_bearing_roll" type="hinge" axis="1 0 0" damping="0.002"/>
+                  
+                  <!-- M16 Hex Coupling Nut (50mm long: spans from X = -0.025m to +0.025m relative to bearing center) -->
+                  <geom name="m16_coupling_nut" type="cylinder" pos="0 0 0" euler="0 90 0" size="0.0138 0.025" material="coupling_mat"/>
+                  <!-- M16-to-M10 Thread Reducer Bushing protruding slightly at far end (X = +0.017m to +0.027m) -->
+                  <geom name="m16_m10_reducer" type="cylinder" pos="0.022 0 0" euler="0 90 0" size="0.008 0.005" material="reducer_mat"/>
+                  <!-- M10 Jam Nut locking Heim Joint 2 against Reducer (X = +0.027m to +0.032m) -->
+                  <geom name="heim2_jam_nut" type="cylinder" pos="0.0295 0 0" euler="0 90 0" size="0.0085 0.0025" material="steel"/>
+                  
+                  <!-- Shank of Heim Joint 2 extending from X = +0.025m to Eye at X = +0.053m (100mm total eye-to-eye) -->
+                  <geom name="heim2_shank" type="cylinder" fromto="0.025 0 0 0.039 0 0" size="0.005" material="steel"/>
+                  <!-- Eye of Heim Joint 2 (bore vertical along Z for Vertical Clevis Pin) -->
+                  <geom name="heim2_eye" type="cylinder" pos="0.053 0 0" euler="0 0 0" size="0.014 0.007" material="steel"/>
+
+                  <!-- ==================== HEIM JOINT 2 BALL & CLEVIS FORK 2 (Vertical Pin) ==================== -->
+                  <body name="heim_2_ball" pos="0.053 0 0">
+                    <!-- +/- 15 deg spherical misalignment cone of Heim 2 -->
+                    <joint name="heim_2_cone" type="ball" range="0 15" damping="0.05"/>
+                    <geom name="heim2_sphere" type="sphere" size="0.011" material="brass"/>
+
+                    <body name="fork_2" pos="0 0 0">
+                      <!-- Yaw rotation around Vertical Clevis Pin (Z) -->
+                      <joint name="pin_2_vert" type="hinge" axis="0 0 1" range="-85 85" damping="0.01"/>
+                      <!-- Vertical Clevis Pin -->
+                      <geom name="pin_2_geom" type="cylinder" pos="0 0 0" size="0.005 0.022" material="brass"/>
+                      <!-- Top and Bottom Clevis Fork Ears -->
+                      <geom name="fork2_ear_top" type="box" pos="0.006 0 0.015" size="0.020 0.014 0.004" material="fork_mat"/>
+                      <geom name="fork2_ear_bot" type="box" pos="0.006 0 -0.015" size="0.020 0.014 0.004" material="fork_mat"/>
+                      <geom name="fork2_base" type="box" pos="0.030 0 0" size="0.008 0.014 0.022" material="fork_mat"/>
+
+                      <!-- ==================== VARIABLE LENGTH BAR 2 ==================== -->
+                      <body name="bar2_outer" pos="0.038 0 0">
+                        <geom name="bar2_cyl" type="capsule" fromto="0 0 0 0.32 0 0" size="0.016" material="bar2_mat"/>
+                        
+                        <body name="bar2_inner" pos="0.32 0 0">
+                          <joint name="slide_2" type="slide" axis="1 0 0" range="-0.12 0.22" damping="2.0"/>
+                          <geom name="bar2_rod" type="capsule" fromto="-0.12 0 0 0.20 0 0" size="0.011" material="steel"/>
+                          
+                          <site name="bar2_tip_site" pos="0.20 0 0" size="0.015" rgba="0 1 0 1"/>
+                        </body>
+                      </body>
+
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+
+    <!-- ==================== BASE PIVOT 2 (Right Anchor) ==================== -->
+    <body name="anchor_2" pos="0.72 0 0.20">
+      <geom name="base2_block" type="box" size="0.035 0.035 0.035" material="steel"/>
+      <site name="anchor2_site" pos="0 0 0" size="0.015" rgba="1 0 0 1"/>
+    </body>
+  </worldbody>
+
+  <equality>
+    <connect name="base_pivot_2" site1="bar2_tip_site" site2="anchor2_site" solref="0.005 1"/>
+  </equality>
+
+  <actuator>
+    <position name="act_bar1_length" joint="slide_1" kp="2500" kv="60" ctrlrange="-0.12 0.22"/>
+    <position name="act_bar2_length" joint="slide_2" kp="2500" kv="60" ctrlrange="-0.12 0.22"/>
+  </actuator>
+</mujoco>

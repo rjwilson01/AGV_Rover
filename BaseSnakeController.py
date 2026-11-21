@@ -347,7 +347,8 @@ class BaseSnakeController(ABC):
             else:
                 v_next = v * c - w * l_r * s
                 w_next = -(v * s + w * l_r * c) / max(l_f, NUMERIC_EPS)
-            v = float(np.clip(v_next, self.cfg.follower_min_speed_frac * abs(v_cmd), 2.0 * abs(v_cmd)))
+            sgn = 1.0 if v_cmd >= 0.0 else -1.0                  # reversing: the followers must roll backwards too
+            v = sgn * float(np.clip(sgn * v_next, self.cfg.follower_min_speed_frac * abs(v_cmd), 2.0 * abs(v_cmd)))
             w = float(np.clip(w_next, -w_lim, w_lim))
             states.append((v, w))
         self.last_follow_states = states

@@ -416,6 +416,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* FIX: reversing. The follower wheel law clamped every follower speed to be positive, so with the lead in reverse the trailers still rolled forwards and bunched up (found in the `--view` sandbox). The clamp now follows the sign of the lead speed. `--plotjuggler` is ignored in `--view` (the sandbox streams no telemetry); a message now says so.
 * `Makefile` (GNU make, e.g. `winget install ezwinports.make`): `make docs` regenerates the README auto sections and both drawio diagrams; also `make compile`, `selfcheck`, `view`, `clean-logs`; `make PYTHON=py docs` to change the interpreter.
 * Force window: slack cables are labelled SLACK, and an INTERNAL FIGHT banner appears when the cables carry far more than the resting sum while the bar pushes back (the two cancel in N). `--view` readout gains a 'formula check' per hitch: the cable-length formula evaluated at the measured pose minus the real tendon length (mm); ~0 means the formula includes the angles correctly.
 * `--view` opens a second window with a LIVE force diagram of one hitch (`forceview.py`): cable tensions, bar axial force, wheel thrust, net force on the trailer behind and a COMPRESSION banner; buttons pick the hitch, tare the resting tension and scale the arrows. `--view` now starts with the lead at `viewer.lead_speed_mps` (default 0).

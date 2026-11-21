@@ -252,7 +252,7 @@ def _automate_pj4_startup(pid: int, layout_file: Path, timeout_s: float = 15.0) 
 
 
 def launch_plotjuggler(base_dir: Path, udp_port: int = 9870, num_joints: int = 1, bar_yaw: bool = False) -> subprocess.Popen:
-    layout_file = build_plotjuggler_layout(base_dir / "pj_auto_layout.xml", udp_port, num_joints, bar_yaw)
+    layout_file = build_plotjuggler_layout(base_dir / "pj_auto_layout.pj4.xml", udp_port, num_joints, bar_yaw)
 
     env = os.environ.copy()
     env["PLOTJUGGLER_ACCEPT_PREVIOUSLY_USED_STREAMING_PLUGIN"] = "1"

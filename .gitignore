@@ -1,5 +1,5 @@
 __pycache__/
-pj_auto_layout.xml
+pj_auto_layout.pj4.xml
 
 # Old timestamped test logs; the real log is sim_log.csv
 sim_log_*.csv

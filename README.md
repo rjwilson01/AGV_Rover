@@ -416,6 +416,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* PlotJuggler layout file renamed `pj_auto_layout.pj4.xml`: PlotJuggler 4's Load Layout dialog only accepts `*.pj4.xml`, so the old `pj_auto_layout.xml` could not be picked in the dialog (delete the old file).
 * FIX: reversing. The follower wheel law clamped every follower speed to be positive, so with the lead in reverse the trailers still rolled forwards and bunched up (found in the `--view` sandbox). The clamp now follows the sign of the lead speed. `--plotjuggler` is ignored in `--view` (the sandbox streams no telemetry); a message now says so.
 * `Makefile` (GNU make, e.g. `winget install ezwinports.make`): `make docs` regenerates the README auto sections and both drawio diagrams; also `make compile`, `selfcheck`, `view`, `clean-logs`; `make PYTHON=py docs` to change the interpreter.
 * Force window: slack cables are labelled SLACK, and an INTERNAL FIGHT banner appears when the cables carry far more than the resting sum while the bar pushes back (the two cancel in N). `--view` readout gains a 'formula check' per hitch: the cable-length formula evaluated at the measured pose minus the real tendon length (mm); ~0 means the formula includes the angles correctly.

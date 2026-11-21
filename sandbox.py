@@ -189,6 +189,22 @@ class Sandbox:
                 except Exception:
                     tens.append(f"{code} {float(data.actuator(nm).ctrl.item()):.3f}/-")
             lines.append("  cables (cmd/actual m): " + "  ".join(tens))
+            if self.ctl.bars:
+                # Does the cable-length formula match the model? Evaluate it at the MEASURED pose (tube yaws, bar lengths, ball
+                # angles from the IR camera) and compare with the real tendon length. ~0 mm means the formula includes the angles
+                # correctly; a systematic error means the formula and the model disagree.
+                try:
+                    tr_m = float(data.joint(f"yaw_rear_{j}").qpos.item())
+                    tf_m = float(data.joint(f"yaw_front_{j + 1}").qpos.item())
+                    ball = ball_ypr_from_trailer_relative((ir[k].yaw, ir[k].pitch, ir[k].roll), tr_m, tf_m)
+                    errs = []
+                    for code, ys, zs in CORNER_SIGNS:
+                        f_len = trailer_cable_len(tr_m, tf_m, ball, ys, zs, cfg, r_m, f_m)
+                        a_len = float(data.tendon(f"t{j}_t{j + 1}_{code}").length.item())
+                        errs.append(f"{code} {1000.0 * (f_len - a_len):+.1f}")
+                    lines.append("  formula check (formula - actual tendon, mm, at the measured pose): " + "  ".join(errs))
+                except Exception:
+                    pass
         lines.append("WHEELS (cmd rad/s)  L / R")
         for i in range(1, cfg.num_trailers + 1):
             l = float(data.actuator(f"m_t{i}_l").ctrl.item())

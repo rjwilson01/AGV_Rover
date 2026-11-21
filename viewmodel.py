@@ -64,7 +64,8 @@ def describe(cfg, model) -> list[str]:
 SHOW_KEYS = {290: "main", 291: "forces", 292: "config", 293: "params", 294: "all"}
 
 
-def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionless: bool = False, session=None) -> int:
+def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionless: bool = False, session=None,
+               plotjuggler: bool = False) -> int:
     """Open the model with physics running, the REAL controller in the loop on manual inputs, and a pop-out Tk window
     with a switch per algorithm, the set-points, and live commanded-vs-measured values. Nothing is logged.
 
@@ -74,7 +75,26 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
     win = None
     prev_ctl = None
     first = True
-    app = {"sb": None}
+    app = {"sb": None, "tm": None}
+
+    def set_recording(on: bool) -> str:
+        """Record telemetry: the same CSV + UDP stream (+ PlotJuggler) as a normal run, from the sandbox state."""
+        if on and app["tm"] is None:
+            from telemetry import TelemetryManager
+            c = app["sb"].cfg
+            meta = {"controller": c.controller_class, "view": "manual sandbox", "base": base,
+                    "frictionless": frictionless, "files": ",".join(session.enabled) if session else "",
+                    "manual_edits": session.command_line() if session else ""}
+            app["tm"] = TelemetryManager(Path(__file__).resolve().parent, udp_host=c.udp_host, udp_port=c.udp_port, enable_csv=True,
+                                         csv_name="sim_view_log.csv", launch_pj=bool(plotjuggler or c.launch_plotjuggler),
+                                         bar_yaw=c.bar_yaw_control, meta=meta)
+            return "recording to sim_view_log.csv (and UDP for PlotJuggler)"
+        if not on and app["tm"] is not None:
+            tm, app["tm"] = app["tm"], None
+            n = len(tm.csv_rows)
+            tm.close()
+            return f"saved {n} rows to sim_view_log.csv"
+        return ""
 
     def on_change():
         try:
@@ -107,7 +127,7 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
         if first:
             try:
                 from tkpanel import ControlWindow
-                win = ControlWindow(ctl, sandbox=sb, session=session, on_change=on_change,
+                win = ControlWindow(ctl, sandbox=sb, session=session, on_change=on_change, on_record=set_recording,
                                     show=(cfg.view_show_force_window, cfg.view_show_config_window, cfg.view_show_param_window))
             except Exception as exc:                                # no Tk (or no display): use the viewer overlay instead
                 print(f"[view] pop-out window unavailable ({exc}); using the on-screen panel in the viewer")
@@ -133,6 +153,8 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
                     mujoco.mj_forward(model, data)
                 else:
                     mujoco.mj_step(model, data)
+                    if app["tm"] is not None:
+                        sb.record_sample(app["tm"])
                 if win is not None:
                     if not win.update():
                         win = None                                   # closed by the user: carry on with the viewer panel
@@ -153,6 +175,7 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
                 viewer.sync()
                 time.sleep(max(0.0, model.opt.timestep - (time.time() - t0)))
         if not reload_requested:
+            set_recording(False)
             return 0
         prev_ctl = ctl
         print("[view] reloading the model with the current settings ...")

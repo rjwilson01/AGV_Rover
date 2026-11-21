@@ -12,3 +12,5 @@ mjmodel.mjb
 MJDATA.TXT
 docs/architecture.png
 docs/architecture.svg
+
+sim_view_log.csv

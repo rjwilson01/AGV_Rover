@@ -38,6 +38,7 @@ class Sandbox:
         self.joints = {model.joint(i).name for i in range(model.njnt)}
         self.sim_time = 0.0
         self._grace_until = 0.0
+        self._cells = None                              # load-cell models, created on the first recorded sample
         self.states = []
         self._last_flags = dict(self.ctl.flags)
         self.baseline = [None] * max(cfg.num_trailers - 1, 0)      # resting cable sum per hitch (tared at 0.5 s or by the button)
@@ -141,11 +142,40 @@ class Sandbox:
                     data.actuator(f"cap_t{j}_t{j + 1}_{code}").ctrl = (
                         calc_cable_len(-y_cmd, -p_ball, r_ball, ys, zs, cfg, rear_bar_m=r_cmd, front_bar_m=f_cmd)
                         - cfg.cable_preload_offset_m)
+        self._rec = dict(hdg=hdg, joint_yaws=list(joint_yaws), bar_yaws=list(bar_yaws), ir=ir)
         ctl.readout = self.readout_text(ir, bar_lengths, bar_yaws, joint_yaws)
         if ctl.pause_on_compression:
             self._check_compression(t)
         if ctl.alert:
             ctl.readout = ctl.alert + "\n" + ctl.readout
+
+    def record_sample(self, telemetry) -> None:
+        """Send one row to a TelemetryManager: the same channels (and PlotJuggler layout) as a normal run, from the sandbox state,
+        plus view/* channels with the set-points and switches so a recording can be interpreted."""
+        from telemetry_pack import cables_and_positions, hitch_names, joint_eulers, loadcell_metrics, tension_forces, trailer_hitch_metrics
+        r = getattr(self, "_rec", None)
+        if r is None:
+            return
+        cfg, data, ctl = self.cfg, self.data, self.ctl
+        tendons, capstans = hitch_names(cfg)
+        quats = [data.body(f"trailer_{i}").xquat for i in range(1, cfg.num_trailers + 1)]
+        extra = dict(self.controller.get_telemetry())
+        extra.update(trailer_hitch_metrics(cfg, data, quats, r["joint_yaws"], r["bar_yaws"], self.joints))
+        for p in ctl.params[:4]:
+            extra[f"view/{p.key}"] = round(float(p.value), 4)
+        for name, on in ctl.flags.items():
+            extra[f"view/algo_{name}"] = int(on)
+        cables, positions = cables_and_positions(cfg, data, capstans, tendons)
+        forces = tension_forces(data, capstans, tendons)
+        if self._cells is None:
+            from loadcell import LoadCell
+            self._cells = ([LoadCell(cfg, ch) for ch in range(4 * (cfg.num_trailers - 1))],
+                           [LoadCell(cfg, 100 + ch) for ch in range(cfg.num_trailers - 1)],
+                           [0.0] * (cfg.num_trailers - 1))
+        extra.update(loadcell_metrics(cfg, self.model, data, forces, tendons, *self._cells))
+        telemetry.update(float(data.time), np.array(data.body("trailer_1").xpos[:2], dtype=float), r["hdg"], r["joint_yaws"],
+                         joint_eulers(cfg, data, quats), forces, extra, cables, positions,
+                         ir_readings=[(i.yaw, i.pitch, i.roll) for i in r["ir"]])
 
     def _check_compression(self, t: float) -> None:
         """Freeze the physics at the first sign of a hitch being pushed (a failure mode), so the state can be inspected."""

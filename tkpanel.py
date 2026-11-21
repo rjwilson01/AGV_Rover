@@ -19,7 +19,7 @@ REPEAT_FIRST_MS, REPEAT_MS, REFRESH_S = 350, 60, 0.1
 
 
 class ControlWindow:
-    def __init__(self, ctl, tk_module=None, sandbox=None, session=None, on_change=None, show=(True, True, True)):
+    def __init__(self, ctl, tk_module=None, sandbox=None, session=None, on_change=None, show=(True, True, True), on_record=None):
         if tk_module is None:
             import tkinter as tk_module            # may raise ImportError: the caller falls back to the viewer text panel
         self.tk = tk_module
@@ -28,6 +28,7 @@ class ControlWindow:
         self.sandbox = sandbox
         self.session = session
         self.on_change = on_change or (lambda: None)
+        self.on_record = on_record
         self.reload_requested = False
         self.alive = True
         self.visible = True
@@ -64,6 +65,11 @@ class ControlWindow:
         tk.Checkbutton(wf, text="Pause on compression", variable=self.pause_var,
                        command=lambda: setattr(self.ctl, "pause_on_compression", bool(self.pause_var.get()))).pack(side="left", padx=8)
         tk.Button(wf, text="Show all", command=self.show_all).pack(side="left", padx=4)
+        if on_record is not None:
+            self.record_var = tk.BooleanVar(value=False)
+            tk.Checkbutton(wf, text="Record telemetry", variable=self.record_var, command=self._toggle_record).pack(side="left", padx=8)
+            self.record_lbl = tk.Label(wf, text="", fg="#005a00")
+            self.record_lbl.pack(side="left")
         self.reload_btn = tk.Button(wf, text="Reload XML", command=self.request_reload)
         self.reload_btn.pack(side="right", padx=4)
         self.reload_lbl = tk.Label(wf, text="", fg="#b00000")
@@ -157,6 +163,14 @@ class ControlWindow:
         for w in (self.configwin, self.paramwin):
             if w is not None:
                 w.refresh(force=True)
+
+    def _toggle_record(self) -> None:
+        try:
+            msg = self.on_record(bool(self.record_var.get()))
+        except Exception as exc:
+            self.record_var.set(False)
+            msg = f"recording failed: {exc}"
+        self.record_lbl.config(text=msg)
 
     def request_reload(self) -> None:
         bad = self.session.validate() if self.session is not None else ""

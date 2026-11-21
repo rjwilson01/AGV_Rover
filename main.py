@@ -20,16 +20,12 @@ from loadcell import LoadCell
 from safeguard import FollowerGuard, RetensionGuard
 from ir_camera import IRCameraModel, relative_euler
 from telemetry import TelemetryManager
+from telemetry_pack import (CORNER_SIGNS, cables_and_positions, hitch_names, joint_eulers as read_joint_eulers,
+                            loadcell_metrics, tension_forces, trailer_hitch_metrics)
 from test_sequence import DEFAULT_DURATION_S, Segment, parse_sequence
 from viewer_overlay import render_bar_yaw_overlay, render_path_overlay
 from xml_builder import generate_mujoco_xml
 
-CORNER_SIGNS = (
-    ("tl",  1.0,  1.0),
-    ("tr", -1.0,  1.0),
-    ("bl",  1.0, -1.0),
-    ("br", -1.0, -1.0),
-)
 STOP_WHEEL_VEL_EPS = 1e-6
 
 
@@ -90,13 +86,11 @@ def main():
 
     if args.view:
         from viewmodel import view_model
-        if args.plotjuggler:
-            print("[view] --plotjuggler is ignored in --view: the sandbox does not stream telemetry or write pj_auto_layout.pj4.xml")
         if len(plans) > 1:
             print("[view] only the first test group is shown (one configuration at a time)")
         from configsession import ConfigSession
         session = ConfigSession(args.preset, plans[0][0].active_files, args.set or ())
-        return view_model(plans[0][1], args.dump_xml, args.base, args.no_friction, session=session)
+        return view_model(plans[0][1], args.dump_xml, args.base, args.no_friction, session=session, plotjuggler=args.plotjuggler)
 
     drive_fn = parse_drive(args.drive) if args.drive else None
     first_cfg = plans[0][1]
@@ -193,12 +187,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
     ]
     joint_names = [f"ball_joint_{j}" for j in range(1, cfg.num_trailers)]
     bars = cfg.bar_yaw_control
-    tendon_names = [
-        f"t{j}_t{j + 1}_{code}"
-        for j in range(1, cfg.num_trailers)
-        for code, _, _ in CORNER_SIGNS
-    ]
-    capstan_names = [f"cap_{t_name}" for t_name in tendon_names]
+    tendon_names, capstan_names = hitch_names(cfg)
     actuator_names = {model.actuator(i).name for i in range(model.nu)}
     joint_names_set = {model.joint(i).name for i in range(model.njnt)}
 
@@ -299,13 +288,7 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
             for k, (w_name, w_vel) in enumerate(zip(wheel_names, wheel_vels)):
                 data.actuator(w_name).ctrl = w_vel * ramp * (1.0 if k < 2 else guard_scale * retension.trailer_scale(k // 2))
 
-            if bars:
-                # With yaw tubes the ball joint is only part of the hitch: use the true trailer-to-trailer R/P/Y.
-                joint_eulers = [
-                    tuple(relative_euler(trailer_quats[j], trailer_quats[j + 1])) for j in range(cfg.num_joints)
-                ]
-            else:
-                joint_eulers = [quat_to_euler(data.joint(j_name).qpos) for j_name in joint_names]
+            joint_eulers = read_joint_eulers(cfg, data, trailer_quats)
             _, r_max = cfg.rear_bar_range_m
             _, f_max = cfg.front_bar_range_m
 
@@ -373,32 +356,10 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
                         render_bar_yaw_overlay(viewer, data, cfg, bar_yaws, controller.last_bar_lengths)
                 viewer.sync()
 
-            forces = {
-                t_name: abs(float(data.actuator(c_name).force.item()))
-                for c_name, t_name in zip(capstan_names, tendon_names)
-            }
+            forces = tension_forces(data, capstan_names, tendon_names)
 
             # Simulated load cells on the four cables (and optionally the bar) of each hitch; compression guard input
-            lc_metrics = {}
-            if cfg.loadcell_enabled:
-                for j_h in range(cfg.num_trailers - 1):
-                    vals = [cable_cells[4 * j_h + k].measure(float(data.time), forces[tendon_names[4 * j_h + k]]) for k in range(4)]
-                    tl_, tr_, bl_, br_ = vals
-                    cable_sums_meas[j_h] = sum(vals)
-                    for (code, _, _), v_ in zip(CORNER_SIGNS, vals):
-                        lc_metrics[f"joint{j_h + 1}/loadcell_{code}_N"] = round(v_, 2)
-                    lc_metrics[f"joint{j_h + 1}/cable_sum_N"] = round(sum(vals), 2)
-                    lc_metrics[f"joint{j_h + 1}/cable_yaw_moment_N"] = round((tl_ + bl_) - (tr_ + br_), 2)
-                    lc_metrics[f"joint{j_h + 1}/cable_pitch_moment_N"] = round((tl_ + tr_) - (bl_ + br_), 2)
-            if cfg.bar_loadcell_enabled and bars:
-                mujoco.mj_rnePostConstraint(model, data)      # fills data.cfrc_int (no model element needed)
-                for j_h in range(cfg.num_trailers - 1):
-                    # Force the parent transmits to the rear slider body through its joint, world frame, projected on
-                    # the bar axis (the slider body's x axis). Sign is set by bar_force_sign (see compare_loads.py).
-                    b_id = model.body(f"t{j_h + 1}_rear_slider").id
-                    axis = np.asarray(data.xmat[b_id]).reshape(3, 3)[:, 0]
-                    f_bar = cfg.bar_force_sign * float(np.dot(np.asarray(data.cfrc_int[b_id])[3:], axis))
-                    lc_metrics[f"joint{j_h + 1}/bar_axial_N"] = round(bar_cells[j_h].measure(float(data.time), f_bar), 2)
+            lc_metrics = loadcell_metrics(cfg, model, data, forces, tendon_names, cable_cells, bar_cells, cable_sums_meas)
             if cfg.loadcell_enabled:
                 retension.update(float(data.time), cable_sums_meas)
                 for j_h in range(cfg.num_trailers - 1):
@@ -419,76 +380,8 @@ def run_sim(cfg, telemetry, duration_s=None, show_viewer=True, status_label="", 
             extra_metrics["guard/follower_scale"] = round(guard_scale, 3)
             extra_metrics["guard/lead_speed_cmd_mps"] = round(v_lead_cmd, 3)
             extra_metrics["guard/lead_speed_meas_mps"] = round(v_lead_meas, 3)
-            # Absolute attitude, height and wheel torque of each trailer (diagnoses cart rocking / drive reaction)
-            for i_t, q_t in enumerate(trailer_quats, start=1):
-                _, p_abs, r_abs = quat_to_euler(q_t)
-                extra_metrics[f"trailer{i_t}/pitch_abs_deg"] = round(float(np.rad2deg(p_abs)), 3)
-                extra_metrics[f"trailer{i_t}/roll_abs_deg"] = round(float(np.rad2deg(r_abs)), 3)
-                extra_metrics[f"trailer{i_t}/z_m"] = round(float(data.body(f"trailer_{i_t}").xpos[2]), 4)
-                extra_metrics[f"trailer{i_t}/wheel_torque_l_Nm"] = round(float(data.actuator(f"m_t{i_t}_l").force.item()), 2)
-                extra_metrics[f"trailer{i_t}/wheel_torque_r_Nm"] = round(float(data.actuator(f"m_t{i_t}_r").force.item()), 2)
-                # wheel speed: what was commanded (after the start ramp) vs what the wheel is actually doing
-                for side in ("l", "r"):
-                    extra_metrics[f"trailer{i_t}/wheel_speed_{side}_rad_s"] = round(float(data.joint(f"j_t{i_t}_{side}").qvel.item()), 3)
-                    extra_metrics[f"trailer{i_t}/wheel_cmd_{side}_rad_s"] = round(float(data.actuator(f"m_t{i_t}_{side}").ctrl.item()), 3)
-            bar_meas_raw = [(r_max, f_max)] * cfg.num_joints    # unrounded, for the geometry below
-            for j_idx in range(cfg.num_joints):
-                r_jnt = f"slide_rear_{j_idx + 1}"
-                f_jnt = f"slide_front_{j_idx + 2}"
-                r_meas_raw = r_max - float(data.joint(r_jnt).qpos.item()) if r_jnt in joint_names_set else r_max
-                f_meas_raw = f_max - float(data.joint(f_jnt).qpos.item()) if f_jnt in joint_names_set else f_max
-                bar_meas_raw[j_idx] = (r_meas_raw, f_meas_raw)
-                extra_metrics[f"joint{j_idx + 1}/rear_bar_meas_m"] = round(r_meas_raw, 4)
-                extra_metrics[f"joint{j_idx + 1}/front_bar_meas_m"] = round(f_meas_raw, 4)
-            if bars:
-                # Per-bar tube yaw (commanded vs measured by the tube hinge), the ball joint, and the
-                # axle distance implied by the measured geometry (compared with the real one in telemetry)
-                for j_idx in range(cfg.num_joints):
-                    n = j_idx + 1
-                    psi_r_cmd, psi_f_cmd = bar_yaws[j_idx]
-                    psi_r_meas = float(data.joint(f"yaw_rear_{n}").qpos.item())
-                    psi_f_meas = float(data.joint(f"yaw_front_{n + 1}").qpos.item())
-                    b_yaw, b_pitch, b_roll = quat_to_euler(data.joint(f"ball_joint_{n}").qpos)
-                    extra_metrics[f"joint{n}/rear_yaw_cmd_deg"] = round(float(np.rad2deg(psi_r_cmd)), 3)
-                    extra_metrics[f"joint{n}/rear_yaw_meas_deg"] = round(float(np.rad2deg(psi_r_meas)), 3)
-                    extra_metrics[f"joint{n}/front_yaw_cmd_deg"] = round(float(np.rad2deg(psi_f_cmd)), 3)
-                    extra_metrics[f"joint{n}/front_yaw_meas_deg"] = round(float(np.rad2deg(psi_f_meas)), 3)
-                    extra_metrics[f"joint{n}/ball_yaw_cmd_deg"] = round(
-                        float(np.rad2deg(joint_yaws[j_idx] - psi_r_cmd - psi_f_cmd)), 3
-                    )
-                    extra_metrics[f"joint{n}/ball_yaw_meas_deg"] = round(float(np.rad2deg(b_yaw)), 3)
-                    extra_metrics[f"joint{n}/ball_pitch_meas_deg"] = round(float(np.rad2deg(b_pitch)), 3)
-                    extra_metrics[f"joint{n}/ball_roll_meas_deg"] = round(float(np.rad2deg(b_roll)), 3)
-                    extra_metrics[f"joint{n}/rear_yaw_torque_Nm"] = round(
-                        float(data.actuator(f"act_yaw_rear_{n}").force.item()), 3)
-                    extra_metrics[f"joint{n}/front_yaw_torque_Nm"] = round(
-                        float(data.actuator(f"act_yaw_front_{n + 1}").force.item()), 3)
-                    extra_metrics[f"joint{n}/axle_dist_kin_m"] = round(
-                        axle_distance(
-                            psi_r_meas, psi_f_meas, (b_yaw, b_pitch, b_roll),
-                            bar_meas_raw[j_idx][0], bar_meas_raw[j_idx][1], cfg,
-                        ),
-                        4,
-                    )
-            # Put the cables into a per joint list
-            joint_cables = []
-            for j_idx in range(cfg.num_joints):
-                cables_j = {}
-                for k, (code, _, _) in enumerate(CORNER_SIGNS):
-                    c_idx = 4 * j_idx + k
-                    t_name = tendon_names[c_idx]
-                    c_name = capstan_names[c_idx]
-                    cables_j[code] = (
-                        float(data.actuator(c_name).ctrl.item()),
-                        float(data.tendon(t_name).length.item()),
-                        abs(float(data.actuator(c_name).force.item())),
-                    )
-                joint_cables.append(cables_j)
-
-            trailer_positions = [
-                tuple(float(v) for v in data.body(f"trailer_{i}").xpos)
-                for i in range(1, cfg.num_trailers + 1)
-            ]
+            extra_metrics.update(trailer_hitch_metrics(cfg, data, trailer_quats, joint_yaws, bar_yaws, joint_names_set))
+            joint_cables, trailer_positions = cables_and_positions(cfg, data, capstan_names, tendon_names)
             # Timed test runs log the whole duration; interactive runs stop logging shortly after the vehicle stops
             if duration_s is not None or post_stop_time <= cfg.post_stop_log_sec:
                 telemetry.update(

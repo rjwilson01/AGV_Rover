@@ -20,6 +20,7 @@ from pathlib import Path
 
 import config as _config
 from config import _deep_merge, _flatten, _parse_set, config_from_raw, read_raw_config, resolve_test_path
+from uischema import UISchema
 from xml_builder import generate_mujoco_xml
 
 BASE_DIR = Path(_config.__file__).resolve().parent
@@ -117,6 +118,8 @@ class ConfigSession:
         for item in set_overrides:
             path, val = _parse_set(item)
             self.manual[tuple(path)] = val
+        self.ui = UISchema.load()
+        self._help: dict | None = None
         self._kinds: dict[tuple, str] | None = None
         self.built_raw: dict | None = None
         self.built_sig: str | None = None
@@ -258,9 +261,20 @@ class ConfigSession:
             rows.append(ParamRow(path, value, loaded, default, "manual" if path in self.manual else src,
                                  path in self.manual, kinds.get(path, "xml"), built))
         known = {dotted(p) for p in found}
-        for key, val in flat_c.items():                # in a TOML but never read by the loader (usually a typo)
-            if key not in known and not key.startswith(("test.", "paths.")):
-                rows.append(ParamRow(tuple(key.split(".")), val, val, _MISSING, "unused", False, "unused", None))
+        flat_l = _flatten(raw_l)
+        for key, val in flat_c.items():
+            if key in known or key.startswith("test."):
+                continue
+            path = tuple(key.split("."))
+            if key.startswith("paths."):                # every course is listed (the controller only reads the active one)
+                src = "code default"
+                for label, flat in layers:
+                    if key in flat:
+                        src = label
+                rows.append(ParamRow(path, val, flat_l.get(key, val), _MISSING, "manual" if path in self.manual else src,
+                                     path in self.manual, "live", None))
+            else:                                       # in a TOML but never read by the loader (usually a typo)
+                rows.append(ParamRow(path, val, val, _MISSING, "unused", False, "unused", None))
         return rows
 
     def set_value(self, path, value) -> None:
@@ -268,6 +282,45 @@ class ConfigSession:
 
     def clear_value(self, path) -> None:
         self.manual.pop(tuple(path), None)
+
+    def set_linked(self, path, value) -> list[str]:
+        """Set a parameter and the ones linked to it in ui.toml (e.g. controller class + drawbar mode); a value equal to what the
+        files give is not kept as an edit. -> the dotted names that were set."""
+        changes = {dotted(path): value}
+        changes.update(self.ui.linked_changes(dotted(path), value))
+        raw_l, _ = self.raw_loaded()
+        for key, val in changes.items():
+            p = tuple(key.split("."))
+            try:
+                loaded = get_path(raw_l, p)
+            except KeyError:
+                loaded = _MISSING
+            if val == loaded:
+                self.manual.pop(p, None)
+            else:
+                self.manual[p] = val
+        return list(changes)
+
+    def clear_linked(self, path) -> None:
+        self.manual.pop(tuple(path), None)
+        for link in self.ui.links:
+            if dotted(path) in link.members:
+                for m in link.members:
+                    self.manual.pop(tuple(m.split(".")), None)
+
+    def help_text(self, key: str) -> str:
+        """The comment written beside the parameter in common.toml (or the controller file)."""
+        if self._help is None:
+            from make_readme import parse_toml_docs
+            self._help = {}
+            for p in (BASE_DIR / "configs" / "common.toml", self._impl_path()):
+                try:
+                    for (sec, k), (_, comment) in parse_toml_docs(p).items():
+                        if comment:
+                            self._help[f"{sec}.{k}"] = comment
+                except Exception:
+                    pass
+        return self._help.get(key, "")
 
     def parse_text(self, text: str, like):
         """Parse the text typed in the window like a TOML value, of the same kind as `like` (so '1' stays a float)."""

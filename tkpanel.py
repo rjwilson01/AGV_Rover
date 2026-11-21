@@ -435,7 +435,8 @@ class _Scroll:
 
 
 class ParamWindow(_SubWindow):
-    """Every parameter, in two lists: LIVE (applied at once) and XML RELOAD (applied by the Reload XML button)."""
+    """Every parameter, grouped as configs/ui.toml says, in two lists: LIVE (applied at once) and XML RELOAD (applied by the
+    Reload XML button). Tick boxes for booleans, drop-downs for the parameters ui.toml gives choices for, text boxes otherwise."""
 
     def __init__(self, parent, session, tk, on_change, on_reload):
         self._init_window(parent, tk, "AGV parameters", "1380x720+60+60")
@@ -453,7 +454,7 @@ class ParamWindow(_SubWindow):
         body = tk.Frame(self.win)
         body.pack(fill="both", expand=True, padx=6)
         self.panes = {}
-        for col, (kind, title) in enumerate((("live", "LIVE parameters - take effect immediately (Enter to apply)"),
+        for col, (kind, title) in enumerate((("live", "LIVE parameters - take effect immediately"),
                                              ("xml", "XML-RELOAD parameters - change the model; press Reload XML"))):
             frame = tk.LabelFrame(body, text=title)
             frame.grid(row=0, column=col, sticky="nsew", padx=2)
@@ -462,64 +463,96 @@ class ParamWindow(_SubWindow):
             sc.outer.pack(fill="both", expand=True)
             self.panes[kind] = sc
         body.rowconfigure(0, weight=1)
-        self.status = tk.Label(self.win, anchor="w")
+        self.status = tk.Label(self.win, anchor="w", justify="left", wraplength=1300)
         self.status.pack(fill="x", padx=6)
-        self.rows = {}            # key -> dict(var, entry, src, row widgets, kind)
+        self.rows = {}            # key -> dict(var, ent, lab, src, undo, widgets, wtype)
+        self.headers = []         # [(header widget, [keys of its rows])]
         self._built = None
         self.refresh(force=True)
 
     # -- building / refreshing --------------------------------------------------------------------------------------
-    def _build(self, rows) -> None:
-        tk = self.tk
+    def _build(self, rows, raw) -> None:
+        tk, ui = self.tk, self.session.ui
         for sc in self.panes.values():
             for w in sc.inner.winfo_children():
                 w.destroy()
-        self.rows = {}
-        count = {"live": 0, "xml": 0}
-        for r in rows:
-            kind = "xml" if r.kind in ("xml",) else "live"
+        self.rows, self.headers = {}, []
+        order = {g: n for n, g in enumerate(ui.group_order())}
+        unused = "Unused by the code (typo?)"
+
+        def group(r):
+            return unused if r.kind == "unused" else ui.group_of(r.key)
+
+        ordered = sorted(rows, key=lambda r: 999 if r.kind == "unused" else order[group(r)])       # stable inside a group
+        n = {"live": 0, "xml": 0}
+        last = {"live": None, "xml": None}
+        members = None
+        for r in ordered:
+            kind = "xml" if r.kind == "xml" else "live"
             sc = self.panes[kind]
-            i = count[kind]
-            count[kind] += 1
-            lab = tk.Label(sc.inner, text=r.key + ("  (unused: typo?)" if r.kind == "unused" else ""), anchor="w", width=34)
-            var = tk.StringVar(value=_fmt(r.value))
-            ent = tk.Entry(sc.inner, textvariable=var, width=26)
+            if last[kind] != group(r):
+                last[kind] = group(r)
+                hdr = tk.Label(sc.inner, text=group(r), anchor="w", bg="#dde6f0", font=("TkDefaultFont", 9, "bold"))
+                hdr.grid(row=n[kind], column=0, columnspan=4, sticky="we", pady=(6, 0))
+                n[kind] += 1
+                members = []
+                self.headers.append((hdr, members))
+            i = n[kind]
+            n[kind] += 1
+            members.append(r.key)
+            wtype, opts = ui.widget(r.key, r.value, raw) if r.kind != "unused" else ("text", [])
+            lab = tk.Label(sc.inner, text=r.key, anchor="w", width=34)
+            if wtype == "bool":
+                var = tk.BooleanVar(value=bool(r.value))
+                ent = tk.Checkbutton(sc.inner, variable=var, anchor="w", command=lambda k=r.path: self._commit(k))
+            elif wtype == "choice":
+                var = tk.StringVar(value=str(r.value))
+                ent = tk.OptionMenu(sc.inner, var, *[str(o) for o in opts], command=lambda v, k=r.path: self._commit(k))
+                ent.config(width=24, anchor="w")
+            else:
+                var = tk.StringVar(value=_fmt(r.value))
+                ent = tk.Entry(sc.inner, textvariable=var, width=26)
+                ent.bind("<Return>", lambda e, k=r.path: self._commit(k))
+                ent.bind("<FocusOut>", lambda e, k=r.path: self._commit(k))
+                ent.bind("<FocusIn>", lambda e, k=r.key: self._help(k))
             src = tk.Label(sc.inner, text=r.source, anchor="w", width=18, fg="#555555")
             undo = tk.Button(sc.inner, text="undo", width=4, command=lambda k=r.path: self._undo(k))
             lab.grid(row=i, column=0, sticky="w")
-            ent.grid(row=i, column=1)
+            ent.grid(row=i, column=1, sticky="w")
             src.grid(row=i, column=2, sticky="w")
             undo.grid(row=i, column=3)
-            ent.bind("<Return>", lambda e, k=r.path: self._commit(k))
-            ent.bind("<FocusOut>", lambda e, k=r.path: self._commit(k))
-            self.rows[r.key] = dict(var=var, ent=ent, lab=lab, src=src, undo=undo, widgets=(lab, ent, src, undo), row=i, kind=kind)
-        self._built = [r.key for r in rows]
+            lab.bind("<Enter>", lambda e, k=r.key: self._help(k))
+            self.rows[r.key] = dict(var=var, ent=ent, lab=lab, src=src, undo=undo, wtype=wtype, widgets=(lab, ent, src, undo))
+        self._built = self._signature(rows, raw)
+
+    def _signature(self, rows, raw):
+        ui = self.session.ui
+        return (tuple(r.key for r in rows), tuple((r.key, tuple(map(str, ui.widget(r.key, r.value, raw)[1]))) for r in rows
+                                                 if r.kind != "unused" and ui.widget(r.key, r.value, raw)[0] == "choice"))
 
     def refresh(self, force: bool = False) -> None:
         try:
             rows = self.session.params()
+            raw, _ = self.session.raw_current()
         except Exception as exc:
             self.status.config(text=f"cannot list parameters: {exc}", fg="#b00000")
             return
-        if self._built != [r.key for r in rows]:
-            self._build(rows)
+        if self._built != self._signature(rows, raw):
+            self._build(rows, raw)
         focus = None
         try:
             focus = self.win.focus_get()
         except Exception:
             pass
-        n_xml = 0
         for r in rows:
             w = self.rows.get(r.key)
             if w is None:
                 continue
             if focus is not w["ent"]:
-                w["var"].set(_fmt(r.value))
+                w["var"].set(bool(r.value) if w["wtype"] == "bool" else (str(r.value) if w["wtype"] == "choice" else _fmt(r.value)))
             w["src"].config(text=r.source)
             differs_built = r.kind == "xml" and r.built is not None and r.value != r.built
-            n_xml += bool(differs_built)
-            bg = "#ffb36b" if differs_built else ("#fff2a8" if r.manual else "white")
-            w["ent"].config(bg=bg)
+            w["ent"].config(bg="#ffb36b" if differs_built else ("#fff2a8" if r.manual else "white"))
         need, names = self.session.reload_needed()
         self.banner.config(text=(f"MODEL OUT OF DATE: {len(names)} XML parameter(s) differ from the loaded model - press Reload XML"
                                  if need else "model matches the settings"))
@@ -527,13 +560,18 @@ class ParamWindow(_SubWindow):
 
     def _apply_filter(self) -> None:
         text = self.filter.get().strip().lower()
+        shown = {}
         for key, w in self.rows.items():
             show = not text or text in key.lower()
+            shown[key] = show
             for widget in w["widgets"]:
-                if show:
-                    widget.grid()
-                else:
-                    widget.grid_remove()
+                (widget.grid if show else widget.grid_remove)()
+        for hdr, keys in self.headers:
+            (hdr.grid if any(shown.get(k, False) for k in keys) else hdr.grid_remove)()
+
+    def _help(self, key: str) -> None:
+        txt = self.session.help_text(key)
+        self.status.config(text=f"{key}: {txt}" if txt else key, fg="#333333")
 
     # -- editing -----------------------------------------------------------------------------------------------------
     def _row(self, path):
@@ -545,25 +583,31 @@ class ParamWindow(_SubWindow):
         r = self._row(path)
         if w is None or r is None:
             return
-        text = w["var"].get().strip()
-        if text == _fmt(r.value):
-            return
-        try:
-            val = self.session.parse_text(text, r.loaded if r.loaded is not _MISSING_ else r.default)
-        except Exception as exc:
-            w["ent"].config(bg="#ff9a9a")
-            self.status.config(text=f"{key}: {exc}", fg="#b00000")
-            return
-        if val == r.loaded:
-            self.session.clear_value(path)
+        if w["wtype"] == "bool":
+            val = bool(w["var"].get())
+        elif w["wtype"] == "choice":
+            val = w["var"].get()
         else:
-            self.session.set_value(path, val)
-        self.status.config(text=f"{key} = {_fmt(val)}" + ("   (XML parameter: press Reload XML)" if r.kind == "xml" else "   (applied)"),
+            text = w["var"].get().strip()
+            if text == _fmt(r.value):
+                return
+            try:
+                val = self.session.parse_text(text, r.loaded if r.loaded is not _MISSING_ else r.default)
+            except Exception as exc:
+                w["ent"].config(bg="#ff9a9a")
+                self.status.config(text=f"{key}: {exc}", fg="#b00000")
+                return
+        if val == r.value:
+            return
+        changed = self.session.set_linked(path, val)
+        also = [k for k in changed if k != key]
+        self.status.config(text=f"{key} = {_fmt(val)}" + (f"   (also set {', '.join(also)})" if also else "")
+                           + ("   (XML parameter: press Reload XML)" if r.kind == "xml" else "   (applied)"),
                            fg="#b00000" if r.kind == "xml" else "#005a00")
         self.on_change()
 
     def _undo(self, path) -> None:
-        self.session.clear_value(path)
+        self.session.clear_linked(path)
         self.on_change()
 
 

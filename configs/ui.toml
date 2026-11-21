@@ -1,0 +1,57 @@
+# Layout and widgets for the --view Parameters window (tkpanel.py). The simulator never reads this file.
+# Keys are "section.key"; * matches anything (fnmatch). A parameter goes in the FIRST group whose patterns match it, and anything
+# that matches nothing lands in "Other", so a new parameter can never go missing. Booleans always get a tick box; a parameter with a
+# [choice] gets a drop-down; everything else is a text box. `python uischema.py` checks this file against the real parameter list.
+
+[[group]]
+name = "Program control"
+match = ["simulation.*", "viewer.*", "drawbar.controller_class", "drawbar.mode"]
+
+[[group]]
+name = "Path"
+match = ["controller.active_path", "paths.*"]
+
+[[group]]
+name = "Navigation (what the controller is told)"
+match = ["nav.*"]
+
+[[group]]
+name = "Sensors"
+match = ["gnss.*", "imu.*", "ir_camera.*", "loadcell.*"]
+
+[[group]]
+name = "Controller and planner"
+match = ["controller.*"]
+
+[[group]]
+name = "Drawbars and cables"
+match = ["drawbar.*", "bars.*", "geometry.cable_*"]
+
+[[group]]
+name = "Vehicle: geometry, mass, water"
+match = ["geometry.*", "mass_layout.*", "tank_slosh.*"]
+
+[[group]]
+name = "Actuators and ground"
+match = ["actuators.*", "terrain.*"]
+
+# ---- drop-downs -------------------------------------------------------------------------------------------------------
+[choice."controller.active_path"]
+from = "paths"                       # the names of the tables under [paths]
+
+[choice."simulation.integrator"]
+options = ["RK4", "Euler", "implicit", "implicitfast"]
+
+[choice."drawbar.controller_class"]
+options = ["FixedDrawbarController", "VariableDrawbarController"]
+
+[choice."drawbar.mode"]
+options = ["fixed", "variable"]
+
+# ---- parameters that must move together ------------------------------------------------------------------------------
+# Picking a value in any member sets the others from the matching row. The controller class and the drawbar mode are one
+# choice: the Variable controller commands telescoping bars that the "fixed" model does not have (and the reverse).
+[[link]]
+name = "Drawbar type"
+members = ["drawbar.controller_class", "drawbar.mode"]
+rows = [["FixedDrawbarController", "fixed"], ["VariableDrawbarController", "variable"]]

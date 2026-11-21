@@ -63,6 +63,13 @@ start visible, all `true` by default; closing one just hides it):
   keeping your set-points and switches. Which list a parameter is in is found by experiment (regenerate the XML with the value
   changed and compare), so it cannot drift out of date. Keys that are in a TOML but never read by the code are marked *unused*
   (usually a typo). Yellow = edited by you; *undo* returns it to the files' value.
+  The layout comes from `configs/ui.toml` (the simulator never reads it): parameters are **grouped** (Program control, Path,
+  Navigation, Sensors, Controller, Drawbars and cables, Vehicle, Actuators and ground; anything unmatched goes under *Other*),
+  booleans get **tick boxes**, parameters with a `[choice]` get **drop-downs** (`controller.active_path` lists the tables under
+  `[paths]`; `simulation.integrator`; `drawbar.controller_class`; `drawbar.mode`), and a `[[link]]` makes parameters move together:
+  the controller class and the drawbar mode are one choice (the Variable controller commands telescoping bars that the `fixed`
+  model does not have), so picking either sets both. Hover a name (or click a text box) to see the comment from the TOML.
+  `python uischema.py` checks `ui.toml` against the real parameter list.
 
 Keys in the window: Left/Right select, Up/Down (or +/-) change, PgUp/PgDn step size, Backspace zero, R reset, Space pause physics.
 Default is `--base fixed` (the lead is welded to the world; wheels spin in the air or drive against the hitches).
@@ -470,6 +477,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Parameters window: new `configs/ui.toml` (+ `uischema.py`) gives groups (program control together, **Path** as its own section with the active path as a drop-down and every course listed), tick boxes for booleans, drop-downs (`active_path`, `integrator`, `controller_class`, `mode`), and linked parameters (controller class + drawbar mode move together). Stand-in tested only.
 * **GNSS in the loop**: `[nav] gnss_in_loop` feeds the controller a GNSS + gyro + odometry estimate (`navfilter.py`) instead of the true lead pose, so receiver noise, bias, latency, outages and gyro drift show up in the path tracking and the tail swing. New test files `t_gnss_in_loop`, `t_gnss_cheap` (10 cm noise + 20 cm bias), `t_gnss_outage_in_loop`; new channels `nav/*`; the lead IMU gyro is now used (it was only logged). Off by default. Stand-in tested (synthetic run: RTK about 4 cm / 3 deg worst case, cheap about 50 cm / 5 deg, outage 10 s about 10 cm); not run in MuJoCo.
 * `--view`: **Pause on compression** tick box (`viewer.pause_on_compression`, default off). The physics freezes the moment any hitch is pushed (the force window's compression test, after the resting-tension baseline is known) and says which hitch; Space resumes with a 1 s grace.
 * `--view` gains a Config-files window (tick/order test files, conflicts, save as a test file), a Parameters window (LIVE vs XML-RELOAD lists, edit, source, undo, unused keys) with a **Reload XML** button and an out-of-date warning, and `viewer.show_*_window` switches (all on by default). New `configsession.py`. Hard-coded constants moved into TOML (XML unchanged at the defaults): `simulation.timestep_s/integrator/gravity_mps2`, `terrain.ground_friction`, `actuators.bar_slide_damping/cable_damping/cable_width_m`, `controller.follower_max_speed_frac/follower_max_yaw_rate`. Stand-in tested only (no Tk or MuJoCo in the cloud copy).

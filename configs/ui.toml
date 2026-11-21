@@ -55,3 +55,25 @@ options = ["fixed", "variable"]
 name = "Drawbar type"
 members = ["drawbar.controller_class", "drawbar.mode"]
 rows = [["FixedDrawbarController", "fixed"], ["VariableDrawbarController", "variable"]]
+
+# ---- one-way rules ------------------------------------------------------------------------------------------------------
+# When every `when` holds, the `then` values are set too (so a combination the code rejects cannot be built from this window).
+[[require]]
+why = "the fixed drawbar model has no yaw tubes"
+when = { "drawbar.mode" = "fixed" }
+then = { "bars.yaw_control" = false }
+
+[[require]]
+why = "yaw tubes only exist on the variable drawbar"
+when = { "bars.yaw_control" = true }
+then = { "drawbar.mode" = "variable", "drawbar.controller_class" = "VariableDrawbarController" }
+
+[[require]]
+why = "the estimate needs a GNSS receiver"
+when = { "nav.gnss_in_loop" = true }
+then = { "gnss.enabled" = true }
+
+[[require]]
+why = "no receiver, no GNSS estimate"
+when = { "gnss.enabled" = false }
+then = { "nav.gnss_in_loop" = false }

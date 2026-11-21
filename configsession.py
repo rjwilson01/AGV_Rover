@@ -286,8 +286,9 @@ class ConfigSession:
     def set_linked(self, path, value) -> list[str]:
         """Set a parameter and the ones linked to it in ui.toml (e.g. controller class + drawbar mode); a value equal to what the
         files give is not kept as an edit. -> the dotted names that were set."""
+        current = _flatten(self.raw_current()[0])
         changes = {dotted(path): value}
-        changes.update(self.ui.linked_changes(dotted(path), value))
+        changes.update(self.ui.consequences(dotted(path), value, current))
         raw_l, _ = self.raw_loaded()
         for key, val in changes.items():
             p = tuple(key.split("."))
@@ -300,6 +301,15 @@ class ConfigSession:
             else:
                 self.manual[p] = val
         return list(changes)
+
+    def validate(self) -> str:
+        """'' if the current settings build, else the reason they cannot (so Reload XML can refuse instead of crashing)."""
+        try:
+            raw, infos = self.raw_current()
+            generate_mujoco_xml(config_from_raw(raw, infos))
+            return ""
+        except Exception as exc:
+            return f"{type(exc).__name__}: {exc}"
 
     def clear_linked(self, path) -> None:
         self.manual.pop(tuple(path), None)

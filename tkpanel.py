@@ -143,7 +143,11 @@ class ControlWindow:
         except Exception as exc:                                # a half-typed value must never kill the window
             self.reload_lbl.config(text=f"(cannot check: {exc})")
             return
-        if need:
+        bad = self.session.validate() if need else ""
+        if bad:
+            self.reload_lbl.config(text=f"CANNOT RELOAD - {bad}")
+            self.reload_btn.config(bg="#ff6b6b")
+        elif need:
             shown = ", ".join(names[:3]) + (" ..." if len(names) > 3 else "")
             self.reload_lbl.config(text=f"MODEL OUT OF DATE ({len(names)} changed: {shown}) - press Reload XML")
             self.reload_btn.config(bg="#ffb3b3")
@@ -155,6 +159,10 @@ class ControlWindow:
                 w.refresh(force=True)
 
     def request_reload(self) -> None:
+        bad = self.session.validate() if self.session is not None else ""
+        if bad:                                          # refuse instead of crashing the viewer
+            self.reload_lbl.config(text=f"CANNOT RELOAD - {bad}")
+            return
         self.reload_requested = True
 
     # hide / show (nothing is ever destroyed, so a closed window can always be brought back)
@@ -587,7 +595,9 @@ class ParamWindow(_SubWindow):
             differs_built = r.kind == "xml" and r.built is not None and r.value != r.built
             w["ent"].config(bg="#ffb36b" if differs_built else ("#fff2a8" if r.manual else "white"))
         need, names = self.session.reload_needed()
-        self.banner.config(text=(f"MODEL OUT OF DATE: {len(names)} XML parameter(s) differ from the loaded model - press Reload XML"
+        bad = self.session.validate() if need else ""
+        self.banner.config(text=(f"CANNOT RELOAD - {bad}" if bad else
+                                 f"MODEL OUT OF DATE: {len(names)} XML parameter(s) differ from the loaded model - press Reload XML"
                                  if need else "model matches the settings"))
         self._apply_filter()
 

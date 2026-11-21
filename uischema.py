@@ -23,10 +23,18 @@ class Link:
 
 
 @dataclass
+class Require:
+    when: dict[str, object]          # all of these true ...
+    then: dict[str, object]          # ... forces these (one direction only)
+    why: str = ""
+
+
+@dataclass
 class UISchema:
     groups: list[tuple[str, list[str]]] = field(default_factory=list)
     choices: dict[str, dict] = field(default_factory=dict)
     links: list[Link] = field(default_factory=list)
+    requires: list[Require] = field(default_factory=list)
 
     @classmethod
     def load(cls, path: Path = UI_PATH) -> "UISchema":
@@ -38,6 +46,7 @@ class UISchema:
             groups=[(g["name"], list(g.get("match", []))) for g in d.get("group", [])],
             choices={k: dict(v) for k, v in d.get("choice", {}).items()},
             links=[Link(l["name"], list(l["members"]), [list(r) for r in l["rows"]]) for l in d.get("link", [])],
+            requires=[Require(dict(r["when"]), dict(r["then"]), r.get("why", "")) for r in d.get("require", [])],
         )
 
     # -- grouping ---------------------------------------------------------------------------------------------------
@@ -78,6 +87,31 @@ class UISchema:
                     out.update({m: v for m, v in zip(link.members, row) if m != key})
         return out
 
+    def consequences(self, key: str, value, current: dict[str, object]) -> dict[str, object]:
+        """Everything that must change when `key` becomes `value`: linked parameters first, then the [[require]] rules (repeated
+        until nothing moves). What the user just chose, and what a link set from it, is never overridden by a rule.
+        `current` = {dotted key: value} of all parameters now."""
+        state = dict(current)
+        state[key] = value
+        protected = {key}
+        changes: dict[str, object] = {}
+        for k, v in self.linked_changes(key, value).items():
+            state[k] = v
+            changes[k] = v
+            protected.add(k)
+        for _ in range(5):
+            moved = False
+            for r in self.requires:
+                if all(state.get(k) == v for k, v in r.when.items()):
+                    for k, v in r.then.items():
+                        if k not in protected and state.get(k) != v:
+                            state[k] = v
+                            changes[k] = v
+                            moved = True
+            if not moved:
+                break
+        return changes
+
     # -- checking ---------------------------------------------------------------------------------------------------
     def validate(self, keys: list[str]) -> list[str]:
         known = set(keys)
@@ -89,6 +123,10 @@ class UISchema:
             for p in patterns:
                 if not any(fnmatch.fnmatchcase(k, p) for k in known):
                     problems.append(f"ui.toml group '{name}': pattern {p} matches no parameter")
+        for r in self.requires:
+            for k in list(r.when) + list(r.then):
+                if k not in known:
+                    problems.append(f"ui.toml [[require]] refers to {k}, which is not a parameter")
         for l in self.links:
             for r in l.rows:
                 if len(r) != len(l.members):

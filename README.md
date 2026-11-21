@@ -69,6 +69,11 @@ start visible, all `true` by default; closing one just hides it):
   `[paths]`; `simulation.integrator`; `drawbar.controller_class`; `drawbar.mode`), and a `[[link]]` makes parameters move together:
   the controller class and the drawbar mode are one choice (the Variable controller commands telescoping bars that the `fixed`
   model does not have), so picking either sets both. Hover a name (or click a text box) to see the comment from the TOML.
+  `[[require]]` rules in the same file are one-way dependencies (e.g. `drawbar.mode = fixed` forces `bars.yaw_control = false`;
+  ticking `bars.yaw_control` switches to the variable drawbar; `nav.gnss_in_loop` needs `gnss.enabled`), so a combination the code
+  rejects cannot be built from the window. **Reload XML** checks the settings first and refuses with the reason (red banner)
+  instead of crashing the viewer. Switching the class here does not copy the other preset's own values; use the command line
+  for a full preset change.
   `python uischema.py` checks `ui.toml` against the real parameter list.
 
 Keys in the window: Left/Right select, Up/Down (or +/-) change, PgUp/PgDn step size, Backspace zero, R reset, Space pause physics.
@@ -477,6 +482,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Parameters window: dependencies. Choosing `Fixed` (class or mode) also sets `bars.yaw_control = false`, which fixes the `[bars] yaw_control = true requires drawbar mode = "variable"` crash on reload; `[[require]]` rules in `ui.toml`; Reload XML validates first and refuses with the reason instead of exiting.
 * `--view` windows can always be brought back: closing any window (including the controller) only hides it. Tick boxes under *Windows* (they follow a window closed with its X), a **Show all** button, and keys in the MuJoCo viewer: **F1** controller, **F2** forces, **F3** config files, **F4** parameters, **F5** all.
 * Parameters window: new `configs/ui.toml` (+ `uischema.py`) gives groups (program control together, **Path** as its own section with the active path as a drop-down and every course listed), tick boxes for booleans, drop-downs (`active_path`, `integrator`, `controller_class`, `mode`), and linked parameters (controller class + drawbar mode move together). Stand-in tested only.
 * **GNSS in the loop**: `[nav] gnss_in_loop` feeds the controller a GNSS + gyro + odometry estimate (`navfilter.py`) instead of the true lead pose, so receiver noise, bias, latency, outages and gyro drift show up in the path tracking and the tail swing. New test files `t_gnss_in_loop`, `t_gnss_cheap` (10 cm noise + 20 cm bias), `t_gnss_outage_in_loop`; new channels `nav/*`; the lead IMU gyro is now used (it was only logged). Off by default. Stand-in tested (synthetic run: RTK about 4 cm / 3 deg worst case, cheap about 50 cm / 5 deg, outage 10 s about 10 cm); not run in MuJoCo.

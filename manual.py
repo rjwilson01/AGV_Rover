@@ -88,6 +88,17 @@ class ManualControls:
             ]
         self.readout = ""        # filled by the sandbox each frame: commanded vs measured values
 
+    def copy_state_from(self, old: "ManualControls") -> None:
+        """Carry the set-point values, switches and selection over after an XML reload (matched by key)."""
+        vals = {p.key: p for p in old.params}
+        for p in self.params:
+            if p.key in vals:
+                p.value = float(np.clip(vals[p.key].value, p.lo, p.hi))
+                p.scale = vals[p.key].scale
+        self.flags.update({k: v for k, v in old.flags.items() if k in self.flags})
+        self.paused = old.paused
+        self.sel = min(old.sel, len(self.params) - 1)
+
     # -- values ---------------------------------------------------------------------------------------------------
     def get(self, key: str) -> float:
         return next(p.value for p in self.params if p.key == key)

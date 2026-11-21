@@ -93,7 +93,9 @@ def main():
             print("[view] --plotjuggler is ignored in --view: the sandbox does not stream telemetry or write pj_auto_layout.pj4.xml")
         if len(plans) > 1:
             print("[view] only the first test group is shown (one configuration at a time)")
-        return view_model(plans[0][1], args.dump_xml, args.base, args.no_friction)
+        from configsession import ConfigSession
+        session = ConfigSession(args.preset, plans[0][0].active_files, args.set or ())
+        return view_model(plans[0][1], args.dump_xml, args.base, args.no_friction, session=session)
 
     drive_fn = parse_drive(args.drive) if args.drive else None
     first_cfg = plans[0][1]

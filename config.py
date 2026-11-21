@@ -107,6 +107,18 @@ class AGVConfig:
     # --- Tooling / display ---
     launch_plotjuggler: bool = False
     view_lead_speed_mps: float = 0.0           # --view starting lead speed
+    sim_timestep_s: float = 0.002              # MuJoCo step (XML)
+    sim_integrator: str = "RK4"
+    sim_gravity_mps2: float = 9.81
+    ground_friction: tuple = (0.85, 0.005, 0.0005)   # sliding, torsional, rolling
+    bar_slide_damping: float = 300.0           # telescoping-bar slide joints (XML)
+    cable_damping: float = 200.0
+    cable_width_m: float = 0.005
+    follower_max_speed_frac: float = 2.0       # follower speed limit, times the lead speed
+    follower_max_yaw_rate: float = 3.0         # rad/s limit on the follower yaw rate in the wheel law
+    view_show_force_window: bool = True        # --view sub-windows (can also be toggled in the control window)
+    view_show_config_window: bool = True
+    view_show_param_window: bool = True
     show_bar_overlay: bool = False             # orange (commanded) / green (measured) bar lines drawn over the model
     bar_min_engagement_m: float = 0.10         # minimum rod-in-tube overlap at full extension (build check)
 
@@ -320,6 +332,12 @@ def load_config(
     set_overrides=(),
 ) -> AGVConfig:
     raw, infos = read_raw_config(impl_toml_path, common_toml_path, test_files, set_overrides)
+    return config_from_raw(raw, infos)
+
+
+def config_from_raw(raw: dict, infos: list[dict] | None = None) -> AGVConfig:
+    """Build the config from an already merged raw dict (the --view parameter window edits that dict directly)."""
+    infos = infos or []
     test_name = " + ".join(i["TestName"] for i in infos)
     test_duration = next((i["duration_s"] for i in reversed(infos) if i["duration_s"] is not None), None)
 
@@ -386,6 +404,18 @@ def load_config(
         launch_plotjuggler=bool(sim.get("launch_plotjuggler", False)),
         show_bar_overlay=bool(v.get("show_bar_overlay", False)),
         view_lead_speed_mps=float(v.get("lead_speed_mps", 0.0)),
+        sim_timestep_s=float(sim.get("timestep_s", 0.002)),
+        sim_integrator=str(sim.get("integrator", "RK4")),
+        sim_gravity_mps2=float(sim.get("gravity_mps2", 9.81)),
+        ground_friction=tuple(float(x) for x in raw.get("terrain", {}).get("ground_friction", [0.85, 0.005, 0.0005])),
+        bar_slide_damping=float(a.get("bar_slide_damping", 300.0)),
+        cable_damping=float(a.get("cable_damping", 200.0)),
+        cable_width_m=float(a.get("cable_width_m", 0.005)),
+        follower_max_speed_frac=float(raw["controller"].get("follower_max_speed_frac", 2.0)),
+        follower_max_yaw_rate=float(raw["controller"].get("follower_max_yaw_rate", 3.0)),
+        view_show_force_window=bool(v.get("show_force_window", True)),
+        view_show_config_window=bool(v.get("show_config_window", True)),
+        view_show_param_window=bool(v.get("show_param_window", True)),
         bar_min_engagement_m=float(bars.get("min_engagement_m", 0.10)),
         follow_ideal_path=bool(raw["controller"].get("follow_ideal_path", True)),
         ref_smooth_m=float(raw["controller"].get("ref_smooth_m", 1.0)),

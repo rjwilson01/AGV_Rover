@@ -329,7 +329,7 @@ class BaseSnakeController(ABC):
         states = [(v, w)]
         if kappa_follow is not None:
             w = float(v_cmd) * float(kappa_follow)       # followers chain from the idealised path, not the lead's wiggle
-        w_lim = 3.0
+        w_lim = float(self.cfg.follower_max_yaw_rate)
         for j in range(self.num_joints):
             psi = self.last_ir_readings[j][0]
             l_r, l_f = bar_lengths[j]
@@ -348,7 +348,8 @@ class BaseSnakeController(ABC):
                 v_next = v * c - w * l_r * s
                 w_next = -(v * s + w * l_r * c) / max(l_f, NUMERIC_EPS)
             sgn = 1.0 if v_cmd >= 0.0 else -1.0                  # reversing: the followers must roll backwards too
-            v = sgn * float(np.clip(sgn * v_next, self.cfg.follower_min_speed_frac * abs(v_cmd), 2.0 * abs(v_cmd)))
+            v = sgn * float(np.clip(sgn * v_next, self.cfg.follower_min_speed_frac * abs(v_cmd),
+                                                  self.cfg.follower_max_speed_frac * abs(v_cmd)))
             w = float(np.clip(w_next, -w_lim, w_lim))
             states.append((v, w))
         self.last_follow_states = states

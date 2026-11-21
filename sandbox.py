@@ -29,6 +29,7 @@ class Sandbox:
         self.cfg = cfg
         self.model, self.data = model, data
         self.ctl = ManualControls(cfg)
+        self.base_cfg = cfg
         self.cfg = replace(cfg, **self.ctl.cfg_overrides())
         self.controller = create_controller(self.cfg)
         self.controller.drive = self._drive
@@ -48,9 +49,23 @@ class Sandbox:
     def _sync_cfg(self) -> None:
         if self.ctl.flags != self._last_flags:
             self._last_flags = dict(self.ctl.flags)
-            self.cfg = replace(self.cfg, **self.ctl.cfg_overrides())
+            self.cfg = replace(self.base_cfg, **self.ctl.cfg_overrides())
             self.controller.cfg = self.cfg
             self.ir = IRCameraModel(self.cfg)
+
+    def apply_cfg(self, cfg) -> None:
+        """Live parameter edit: swap in a new config without rebuilding the model (the controller restarts; the physics goes on).
+        Parameters that change the model itself need a reload (configsession.py keeps those at their built values)."""
+        from manual import FLAGS
+        self.base_cfg = cfg
+        for name, _, _, field in FLAGS:                       # a switch that mirrors a config field follows the config
+            if field is not None and name != "ball_hold_ir" and hasattr(cfg, field):
+                self.ctl.flags[name] = bool(getattr(cfg, field))
+        self.cfg = replace(cfg, **self.ctl.cfg_overrides())
+        self.controller = create_controller(self.cfg)
+        self.controller.drive = self._drive
+        self.ir = IRCameraModel(self.cfg)
+        self._last_flags = dict(self.ctl.flags)
 
     # -- one frame ------------------------------------------------------------------------------------------------
     def step(self) -> None:

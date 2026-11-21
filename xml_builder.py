@@ -95,7 +95,7 @@ def _build_trailer_body(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
             stroke_f = f_max - f_min
             lines.append(
                 f'{ind}\t\t<joint name="slide_front_{idx}" type="slide" axis="1 0 0" '
-                f'limited="true" range="0 {stroke_f:.4f}" damping="300"/>'
+                f'limited="true" range="0 {stroke_f:.4f}" damping="{cfg.bar_slide_damping:g}"/>'
             )
             # Outer sleeve fixed to chassis from +cx to +f_min
             sleeve_end_f = max(cx + 0.05, f_min)
@@ -165,7 +165,7 @@ def _build_trailer_body(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
             lines.append(f'{b_ind}\t<body name="t{idx}_rear_slider" pos="-{r_max:.3f} 0 0">')
             lines.append(
                 f'{b_ind}\t\t<joint name="slide_rear_{idx}" type="slide" axis="1 0 0" '
-                f'limited="true" range="0 {stroke_r:.4f}" damping="300"/>'
+                f'limited="true" range="0 {stroke_r:.4f}" damping="{cfg.bar_slide_damping:g}"/>'
             )
             # Inner telescoping rod extending from hitch tip (0 0 0) back into outer sleeve
             rod_len_r = max(0.05, r_max - cx)
@@ -234,7 +234,7 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
         add(1, f'<body name="t{idx}_front_tube" pos="{-s_f_max:.3f} 0 0">')
         if has_front_slider:
             add(2, f'<joint name="slide_front_{idx}" type="slide" axis="1 0 0" '
-                   f'limited="true" range="0 {f_max - f_min:.4f}" damping="300"/>')
+                   f'limited="true" range="0 {f_max - f_min:.4f}" damping="{cfg.bar_slide_damping:g}"/>')
         add(2, f'<geom name="t{idx}_drawbar_front_tube" type="capsule" fromto="0 0 0 {max(0.05, s_f_min - 0.02):.3f} 0 0" '
                f'size="0.032" mass="3.0" material="drawbar" contype="0" conaffinity="0"/>')
         # The trailer pivots about the tube origin (its front pivot, p ahead of the trailer centre)
@@ -283,7 +283,7 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
         add(lv + 1, f'<body name="t{idx}_rear_slider" pos="{-s_r_max:.3f} 0 0">')
         if has_rear_slider:
             add(lv + 2, f'<joint name="slide_rear_{idx}" type="slide" axis="1 0 0" '
-                        f'limited="true" range="0 {r_max - r_min:.4f}" damping="300"/>')
+                        f'limited="true" range="0 {r_max - r_min:.4f}" damping="{cfg.bar_slide_damping:g}"/>')
         add(lv + 2, f'<geom name="t{idx}_drawbar_rear_rod" type="capsule" fromto="{max(0.05, s_r_min - 0.02):.3f} 0 0 0 0 0" '
                     f'size="0.022" mass="2.0" material="drawbar" contype="0" conaffinity="0"/>')
         out.append(_build_trailer_body_bars(idx + 1, cfg, depth + lv + 2))
@@ -321,7 +321,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
         for code, _, _ in SITE_CORNERS:
             t_name = f"t{i}_t{nxt}_{code}"
             tendons.append(
-                f'\t\t<spatial name="{t_name}" width="0.005" damping="200" material="cable_mat">\n'
+                f'\t\t<spatial name="{t_name}" width="{cfg.cable_width_m:g}" damping="{cfg.cable_damping:g}" material="cable_mat">\n'
                 f'\t\t\t<site site="j_t{i}_f{code}"/>\n'
                 f'\t\t\t<site site="j_t{nxt}_b{code}"/>\n'
                 f'\t\t</spatial>'
@@ -361,7 +361,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
             rows.append(f'\t\t<gyro name="t{i}_gyro" site="t{i}_imu"/>')
         sensor_xml = "\t<sensor>\n" + "\n".join(rows) + "\n\t</sensor>\n"
     return f"""<mujoco model="agv_{cfg.num_trailers}trailer_{cfg.drawbar_mode}">
-\t<option timestep="0.002" gravity="0 0 -9.81" integrator="RK4"/>
+\t<option timestep="{cfg.sim_timestep_s:g}" gravity="0 0 -{cfg.sim_gravity_mps2:g}" integrator="{cfg.sim_integrator}"/>
 \t<visual>
 \t\t<global offwidth="1280" offheight="720"/>
 \t\t<rgba haze="0.15 0.25 0.35 1"/>
@@ -378,7 +378,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 \t</asset>
 \t<worldbody>
 \t\t<light pos="0 0 8" dir="0 0 -1" diffuse="0.9 0.9 0.9"/>
-\t\t<geom name="ground" type="plane" size="50 50 0.1" material="paddock" friction="0.85 0.005 0.0005"/>
+\t\t<geom name="ground" type="plane" size="50 50 0.1" material="paddock" friction="{cfg.ground_friction[0]:g} {cfg.ground_friction[1]:g} {cfg.ground_friction[2]:g}"/>
 \t\t<geom name="rut_1" type="box" pos="2.2 0.30 0.025" size="0.35 0.25 0.025" euler="0 5 0" material="paddock"/>
 \t\t<geom name="rut_2" type="box" pos="3.6 -0.30 0.030" size="0.40 0.25 0.030" euler="0 -6 0" material="paddock"/>
 \t\t<geom name="rut_3" type="box" pos="5.0 0.28 0.028" size="0.35 0.25 0.028" euler="4 0 0" material="paddock"/>

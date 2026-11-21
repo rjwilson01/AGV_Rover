@@ -49,6 +49,21 @@ available) has:
 * a **live readout**: IR hitch angle, bar and tube yaw commanded vs measured, cable commanded vs actual length, wheel commands and the
   follower law's (v, w).
 
+**Sub-windows** (three check boxes under *Windows*; `viewer.show_force_window`, `show_config_window`, `show_param_window` set which
+start visible, all `true` by default; closing one just hides it):
+
+* **Forces**: the live force diagram of one hitch.
+* **Config files**: every `configs/test/*.toml` with a tick box and an order number. The files load in the listed order, **later
+  files win** where two set the same parameter (use the ^ / v buttons to reorder); the window lists those conflicts, shows the
+  equivalent `--tests/--set` command line, and can save the current setup (files plus your edits) as a new test file.
+* **Parameters**: every parameter the loader reads, with its source (common / controller / test file / manual) in two lists.
+  **LIVE** parameters (controller gains, filters, planner, sensors...) apply as soon as you press Enter. **XML-RELOAD**
+  parameters change the model itself (geometry, masses, ranges, actuator gains, timestep, friction...); they are only recorded, turn
+  orange, and a red *MODEL OUT OF DATE* warning appears until you press **Reload XML**, which rebuilds the model and viewer while
+  keeping your set-points and switches. Which list a parameter is in is found by experiment (regenerate the XML with the value
+  changed and compare), so it cannot drift out of date. Keys that are in a TOML but never read by the code are marked *unused*
+  (usually a typo). Yellow = edited by you; *undo* returns it to the files' value.
+
 Keys in the window: Left/Right select, Up/Down (or +/-) change, PgUp/PgDn step size, Backspace zero, R reset, Space pause physics.
 Default is `--base fixed` (the lead is welded to the world; wheels spin in the air or drive against the hitches).
 The wheel law only gives different left/right speeds when the lead has a speed: its correction scales with `v`.
@@ -177,6 +192,9 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `capstan_kp` | 20000.0 |  |  |  |
 | `capstan_kv` | 500.0 |  |  |  |
 | `capstan_max_pull_n` | 6000.0 |  |  |  |
+| `bar_slide_damping` | 300.0 |  |  | telescoping bar slide joints, N*s/m |
+| `cable_damping` | 200.0 |  |  | hitch cable (tendon) damping |
+| `cable_width_m` | 0.005 |  |  | drawn thickness of the cables |
 
 ### `[controller]`
 
@@ -191,6 +209,8 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `curv_filter_m` | 0.5 |  |  | low-pass on the curvature command, in metres travelled (0 = off) |
 | `curv_rate_limit_per_m` | 0.6 |  |  | max curvature change per metre travelled (0 = off) |
 | `follower_min_speed_frac` | 0.3 |  |  | followers never stall below this fraction of the lead's speed |
+| `follower_max_speed_frac` | 2.0 |  |  | ... nor exceed this multiple of it |
+| `follower_max_yaw_rate` | 3.0 |  |  | rad/s limit on the yaw rate the follower wheel law may ask for |
 | `planner_enabled` | true |  |  | Round waypoint corners with arcs and cap curvature at what the hitches can follow |
 | `planner_margin` | 0.85 |  |  | fraction of the hitch yaw range the planner may use |
 | `planner_spacing_m` | 0.05 |  |  |  |
@@ -237,6 +257,15 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `save_csv_log` | true |  |  |  |
 | `launch_plotjuggler` | false |  |  | true (or --plotjuggler) starts PlotJuggler automatically; UDP streaming stays on |
 | `post_stop_log_sec` | 2.0 |  |  |  |
+| `timestep_s` | 0.002 |  |  | MuJoCo step (needs an XML reload in --view) |
+| `integrator` | "RK4" |  |  | RK4, Euler, implicit or implicitfast |
+| `gravity_mps2` | 9.81 |  |  |  |
+
+### `[terrain]`
+
+| Key | Default | Variable | Fixed | Description |
+|---|---|---|---|---|
+| `ground_friction` | [0.85, 0.005, 0.0005] |  |  | sliding, torsional, rolling (the floor geom) |
 
 ### `[viewer]`
 
@@ -246,6 +275,9 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `camera_azimuth_deg` | 90.0 |  |  |  |
 | `camera_elevation_deg` | -45.0 |  |  |  |
 | `lead_speed_mps` | 0.0 |  |  | --view starts with the lead at this speed (the wheel law's straightening needs v > 0; raise it in the window) |
+| `show_force_window` | true |  |  | --view sub-windows: live force diagram, config-file list, all parameters (also toggled in the control window) |
+| `show_config_window` | true |  |  |  |
+| `show_param_window` | true |  |  |  |
 | `show_bar_overlay` | false |  |  | orange/green debug lines for commanded/measured bar direction |
 
 ### `[paths]`
@@ -417,6 +449,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* `--view` gains a Config-files window (tick/order test files, conflicts, save as a test file), a Parameters window (LIVE vs XML-RELOAD lists, edit, source, undo, unused keys) with a **Reload XML** button and an out-of-date warning, and `viewer.show_*_window` switches (all on by default). New `configsession.py`. Hard-coded constants moved into TOML (XML unchanged at the defaults): `simulation.timestep_s/integrator/gravity_mps2`, `terrain.ground_friction`, `actuators.bar_slide_damping/cable_damping/cable_width_m`, `controller.follower_max_speed_frac/follower_max_yaw_rate`. Stand-in tested only (no Tk or MuJoCo in the cloud copy).
 * Test file `t_yaw_cables_only` (`geometry.cable_anchor_z_m = 0`): the top and bottom cable anchors coincide at bar height, so the four cables act as two yaw-only pairs and cable length no longer depends on ball pitch/roll. Not run yet.
 * PlotJuggler layout file renamed `pj_auto_layout.pj4.xml`: PlotJuggler 4's Load Layout dialog only accepts `*.pj4.xml`, so the old `pj_auto_layout.xml` could not be picked in the dialog (delete the old file).
 * FIX: reversing. The follower wheel law clamped every follower speed to be positive, so with the lead in reverse the trailers still rolled forwards and bunched up (found in the `--view` sandbox). The clamp now follows the sign of the lead speed. `--plotjuggler` is ignored in `--view` (the sandbox streams no telemetry); a message now says so.

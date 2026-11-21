@@ -90,7 +90,7 @@ def main():
     if args.view:
         from viewmodel import view_model
         if args.plotjuggler:
-            print("[view] --plotjuggler is ignored in --view: the sandbox does not stream telemetry or write pj_auto_layout.xml")
+            print("[view] --plotjuggler is ignored in --view: the sandbox does not stream telemetry or write pj_auto_layout.pj4.xml")
         if len(plans) > 1:
             print("[view] only the first test group is shown (one configuration at a time)")
         return view_model(plans[0][1], args.dump_xml, args.base, args.no_friction)

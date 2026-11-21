@@ -58,6 +58,9 @@ class ControlWindow:
             var = tk.BooleanVar(value=bool(self._want[key]))
             self.sub_vars[key] = var
             tk.Checkbutton(wf, text=label, variable=var, command=lambda k=key: self._toggle_sub(k)).pack(side="left")
+        self.pause_var = tk.BooleanVar(value=bool(ctl.pause_on_compression))
+        tk.Checkbutton(wf, text="Pause on compression", variable=self.pause_var,
+                       command=lambda: setattr(self.ctl, "pause_on_compression", bool(self.pause_var.get()))).pack(side="left", padx=8)
         self.reload_btn = tk.Button(wf, text="Reload XML", command=self.request_reload)
         self.reload_btn.pack(side="right", padx=4)
         self.reload_lbl = tk.Label(wf, text="", fg="#b00000")
@@ -158,6 +161,7 @@ class ControlWindow:
     def rebind(self, ctl, sandbox) -> None:
         """After an XML reload: new set-point list and a new simulation behind the same windows."""
         self.ctl, self.sandbox = ctl, sandbox
+        self.pause_var.set(ctl.pause_on_compression)
         for name, var in self.flag_vars.items():
             var.set(ctl.flags[name])
         self._build_setpoints()
@@ -232,6 +236,8 @@ class ControlWindow:
             val.config(text=f"{p.value:+8.3f} {p.unit}   step {p.step * p.scale:g}   [{p.lo:g}..{p.hi:g}]",
                        bg="#ffe9a8" if sel else self.root.cget("bg"))
         self.pause_btn.config(text="Resume physics (Space)" if self.ctl.paused else "Pause physics (Space)")
+        if self.pause_var.get() != self.ctl.pause_on_compression:
+            self.pause_var.set(self.ctl.pause_on_compression)
         self.text.delete("1.0", "end")
         self.text.insert("1.0", self.ctl.readout or "(readout appears once the simulation is running)")
         if self.forces is not None and self.forces.visible:

@@ -101,6 +101,7 @@ camera_distance_m = 6.0
 camera_azimuth_deg = 90.0
 camera_elevation_deg = -45.0
 lead_speed_mps = 0.0              # --view starts with the lead at this speed (the wheel law's straightening needs v > 0; raise it in the window)
+pause_on_compression = false       # --view: freeze the physics the moment any hitch is pushed (compression); Space resumes (also a tick box)
 show_force_window = true           # --view sub-windows: live force diagram, config-file list, all parameters (also toggled in the control window)
 show_config_window = true
 show_param_window = true

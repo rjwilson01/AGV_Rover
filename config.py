@@ -116,6 +116,7 @@ class AGVConfig:
     cable_width_m: float = 0.005
     follower_max_speed_frac: float = 2.0       # follower speed limit, times the lead speed
     follower_max_yaw_rate: float = 3.0         # rad/s limit on the follower yaw rate in the wheel law
+    view_pause_on_compression: bool = False    # --view: freeze the physics when a hitch goes into compression
     view_show_force_window: bool = True        # --view sub-windows (can also be toggled in the control window)
     view_show_config_window: bool = True
     view_show_param_window: bool = True
@@ -413,6 +414,7 @@ def config_from_raw(raw: dict, infos: list[dict] | None = None) -> AGVConfig:
         cable_width_m=float(a.get("cable_width_m", 0.005)),
         follower_max_speed_frac=float(raw["controller"].get("follower_max_speed_frac", 2.0)),
         follower_max_yaw_rate=float(raw["controller"].get("follower_max_yaw_rate", 3.0)),
+        view_pause_on_compression=bool(v.get("pause_on_compression", False)),
         view_show_force_window=bool(v.get("show_force_window", True)),
         view_show_config_window=bool(v.get("show_config_window", True)),
         view_show_param_window=bool(v.get("show_param_window", True)),

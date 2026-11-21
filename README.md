@@ -52,7 +52,7 @@ available) has:
 **Sub-windows** (three check boxes under *Windows*; `viewer.show_force_window`, `show_config_window`, `show_param_window` set which
 start visible, all `true` by default; closing one just hides it):
 
-* **Forces**: the live force diagram of one hitch.
+* **Forces**: the live force diagram of one hitch. The *Pause on compression* box freezes the physics when any hitch goes into compression.
 * **Config files**: every `configs/test/*.toml` with a tick box and an order number. The files load in the listed order, **later
   files win** where two set the same parameter (use the ^ / v buttons to reorder); the window lists those conflicts, shows the
   equivalent `--tests/--set` command line, and can save the current setup (files plus your edits) as a new test file.
@@ -275,6 +275,7 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `camera_azimuth_deg` | 90.0 |  |  |  |
 | `camera_elevation_deg` | -45.0 |  |  |  |
 | `lead_speed_mps` | 0.0 |  |  | --view starts with the lead at this speed (the wheel law's straightening needs v > 0; raise it in the window) |
+| `pause_on_compression` | false |  |  | --view: freeze the physics the moment any hitch is pushed (compression); Space resumes (also a tick box) |
 | `show_force_window` | true |  |  | --view sub-windows: live force diagram, config-file list, all parameters (also toggled in the control window) |
 | `show_config_window` | true |  |  |  |
 | `show_param_window` | true |  |  |  |
@@ -449,6 +450,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* `--view`: **Pause on compression** tick box (`viewer.pause_on_compression`, default off). The physics freezes the moment any hitch is pushed (the force window's compression test, after the resting-tension baseline is known) and says which hitch; Space resumes with a 1 s grace.
 * `--view` gains a Config-files window (tick/order test files, conflicts, save as a test file), a Parameters window (LIVE vs XML-RELOAD lists, edit, source, undo, unused keys) with a **Reload XML** button and an out-of-date warning, and `viewer.show_*_window` switches (all on by default). New `configsession.py`. Hard-coded constants moved into TOML (XML unchanged at the defaults): `simulation.timestep_s/integrator/gravity_mps2`, `terrain.ground_friction`, `actuators.bar_slide_damping/cable_damping/cable_width_m`, `controller.follower_max_speed_frac/follower_max_yaw_rate`. Stand-in tested only (no Tk or MuJoCo in the cloud copy).
 * Test file `t_yaw_cables_only` (`geometry.cable_anchor_z_m = 0`): the top and bottom cable anchors coincide at bar height, so the four cables act as two yaw-only pairs and cable length no longer depends on ball pitch/roll. Not run yet.
 * PlotJuggler layout file renamed `pj_auto_layout.pj4.xml`: PlotJuggler 4's Load Layout dialog only accepts `*.pj4.xml`, so the old `pj_auto_layout.xml` could not be picked in the dialog (delete the old file).

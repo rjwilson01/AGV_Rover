@@ -62,6 +62,8 @@ class ManualControls:
         self.cfg = cfg
         self.bars = bool(cfg.bar_yaw_control)
         self.paused = False
+        self.pause_on_compression = bool(cfg.view_pause_on_compression)
+        self.alert = ""                                  # why the physics was paused automatically
         self.params: list[Param] = []
         self.sel = 0
         self.flags = {name: default for name, default, _, _ in FLAGS}
@@ -97,6 +99,7 @@ class ManualControls:
                 p.scale = vals[p.key].scale
         self.flags.update({k: v for k, v in old.flags.items() if k in self.flags})
         self.paused = old.paused
+        self.pause_on_compression = old.pause_on_compression
         self.sel = min(old.sel, len(self.params) - 1)
 
     # -- values ---------------------------------------------------------------------------------------------------
@@ -137,6 +140,8 @@ class ManualControls:
             self.reset_all()
         elif code == KEY_SPACE:
             self.paused = not self.paused
+            if not self.paused:
+                self.alert = ""
         else:
             return False
         return True
@@ -145,6 +150,7 @@ class ManualControls:
     def panel(self) -> tuple[str, str]:
         head = [
             "MANUAL SANDBOX" + ("   [PHYSICS PAUSED]" if self.paused else ""),
+            *([self.alert] if self.alert else []),
             "Left/Right select | Up/Down +/- | PgUp/PgDn step | Backspace zero | R reset | Space pause",
             "(the pop-out window has the same controls plus switches for each algorithm)",
             "",

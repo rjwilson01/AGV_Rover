@@ -37,6 +37,7 @@ class Sandbox:
         self.actuators = {model.actuator(i).name for i in range(model.nu)}
         self.joints = {model.joint(i).name for i in range(model.njnt)}
         self.sim_time = 0.0
+        self._grace_until = 0.0
         self.states = []
         self._last_flags = dict(self.ctl.flags)
         self.baseline = [None] * max(cfg.num_trailers - 1, 0)      # resting cable sum per hitch (tared at 0.5 s or by the button)
@@ -141,6 +142,23 @@ class Sandbox:
                         calc_cable_len(-y_cmd, -p_ball, r_ball, ys, zs, cfg, rear_bar_m=r_cmd, front_bar_m=f_cmd)
                         - cfg.cable_preload_offset_m)
         ctl.readout = self.readout_text(ir, bar_lengths, bar_yaws, joint_yaws)
+        if ctl.pause_on_compression:
+            self._check_compression(t)
+        if ctl.alert:
+            ctl.readout = ctl.alert + "\n" + ctl.readout
+
+    def _check_compression(self, t: float) -> None:
+        """Freeze the physics at the first sign of a hitch being pushed (a failure mode), so the state can be inspected."""
+        ctl = self.ctl
+        if ctl.paused or t < max(self.cfg.retension_baseline_s, self._grace_until):
+            return                                   # not before the resting tension is known; 1 s grace after a resume
+        for j in range(1, self.cfg.num_trailers):
+            snap = self.force_snapshot(j)
+            if snap and snap.get("compression"):
+                ctl.paused = True
+                ctl.alert = f"PAUSED: hitch {j} is in compression (Space to resume)"
+                self._grace_until = t + 1.0
+                return
 
     # -- live force diagram data ---------------------------------------------------------------------------------
     def force_snapshot(self, j: int) -> dict | None:

@@ -60,6 +60,10 @@ def describe(cfg, model) -> list[str]:
     return lines
 
 
+# GLFW key codes the viewer passes to key_callback
+SHOW_KEYS = {290: "main", 291: "forces", 292: "config", 293: "params", 294: "all"}
+
+
 def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionless: bool = False, session=None) -> int:
     """Open the model with physics running, the REAL controller in the loop on manual inputs, and a pop-out Tk window
     with a switch per algorithm, the set-points, and live commanded-vs-measured values. Nothing is logged.
@@ -113,6 +117,11 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
         first = False
 
         def on_key(code, ctl=ctl):
+            name = SHOW_KEYS.get(code)
+            if name is not None:                                     # F1..F4 / F5 bring windows back (handled in the Tk thread)
+                if win is not None:
+                    win.request_show(name)
+                return
             ctl.key(code)
 
         reload_requested = False
@@ -137,7 +146,8 @@ def view_model(cfg, dump_xml: str | None = None, base: str = "fixed", frictionle
                         viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_BOTTOMLEFT, ctl.readout, ""))
                     else:
                         viewer.set_texts((mujoco.mjtFont.mjFONT_NORMAL, mujoco.mjtGridPos.mjGRID_TOPLEFT,
-                                          "controls are in the pop-out window" + ("  [PHYSICS PAUSED]" if ctl.paused else ""), ""))
+                                          "F1 controls | F2 forces | F3 config files | F4 parameters | F5 all windows"
+                                          + ("  [PHYSICS PAUSED]" if ctl.paused else ""), ""))
                 except Exception:
                     pass
                 viewer.sync()

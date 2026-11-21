@@ -30,11 +30,13 @@ class ControlWindow:
         self.on_change = on_change or (lambda: None)
         self.reload_requested = False
         self.alive = True
+        self.visible = True
+        self._pending = set()          # window names asked for from the viewer's key callback (another thread): shown in update()
         self._after_id = None
         self._last_refresh = 0.0
         self.root = tk.Tk()
         self.root.title("AGV manual sandbox")
-        self.root.protocol("WM_DELETE_WINDOW", self._close)
+        self.root.protocol("WM_DELETE_WINDOW", self._close)       # closing only hides; F1..F4 in the viewer (or the boxes) bring it back
         self.root.bind("<KeyPress>", self._on_key)
 
         # --- algorithm switches
@@ -61,6 +63,7 @@ class ControlWindow:
         self.pause_var = tk.BooleanVar(value=bool(ctl.pause_on_compression))
         tk.Checkbutton(wf, text="Pause on compression", variable=self.pause_var,
                        command=lambda: setattr(self.ctl, "pause_on_compression", bool(self.pause_var.get()))).pack(side="left", padx=8)
+        tk.Button(wf, text="Show all", command=self.show_all).pack(side="left", padx=4)
         self.reload_btn = tk.Button(wf, text="Reload XML", command=self.request_reload)
         self.reload_btn.pack(side="right", padx=4)
         self.reload_lbl = tk.Label(wf, text="", fg="#b00000")
@@ -154,6 +157,36 @@ class ControlWindow:
     def request_reload(self) -> None:
         self.reload_requested = True
 
+    # hide / show (nothing is ever destroyed, so a closed window can always be brought back)
+    def set_main_visible(self, on: bool) -> None:
+        self.visible = bool(on)
+        (self.root.deiconify if on else self.root.withdraw)()
+        if on:
+            self.root.lift()
+
+    def show_all(self) -> None:
+        self.set_main_visible(True)
+        for key, w in self.sub.items():
+            if w is not None:
+                w.set_visible(True)
+                self.sub_vars[key].set(True)
+
+    def request_show(self, name: str) -> None:
+        """Thread-safe: ask for 'main', 'forces', 'config', 'params' or 'all' to be shown (handled on the next update())."""
+        self._pending.add(name)
+
+    def _handle_pending(self) -> None:
+        while self._pending:
+            name = self._pending.pop()
+            if name in ("main", "all"):
+                self.set_main_visible(True)
+            if name == "all":
+                self.show_all()
+            w = self.sub.get(name)
+            if w is not None:
+                w.set_visible(True)
+                self.sub_vars[name].set(True)
+
     def take_reload(self) -> bool:
         r, self.reload_requested = self.reload_requested, False
         return r
@@ -212,11 +245,7 @@ class ControlWindow:
         button.bind("<ButtonRelease-1>", release)
 
     def _close(self) -> None:
-        self.alive = False
-        try:
-            self.root.destroy()
-        except Exception:
-            pass
+        self.set_main_visible(False)
 
     # -- display --------------------------------------------------------------------------------------------------
     def refresh(self, force: bool = False, now: float | None = None) -> None:
@@ -240,6 +269,9 @@ class ControlWindow:
             self.pause_var.set(self.ctl.pause_on_compression)
         self.text.delete("1.0", "end")
         self.text.insert("1.0", self.ctl.readout or "(readout appears once the simulation is running)")
+        for key, w in self.sub.items():                   # keep the tick boxes in step with windows closed by their X
+            if w is not None and bool(self.sub_vars[key].get()) != w.visible:
+                self.sub_vars[key].set(w.visible)
         if self.forces is not None and self.forces.visible:
             self.forces.refresh()
 
@@ -248,6 +280,7 @@ class ControlWindow:
         if not self.alive:
             return False
         try:
+            self._handle_pending()
             self.refresh()
             self.root.update()
         except Exception:

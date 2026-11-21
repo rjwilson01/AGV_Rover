@@ -9,7 +9,7 @@ drawbars and cables, driven by a leader / follow-the-leader controller. Two cont
   Tyre skid has not been studied yet; stabilise first.
 
 > This file is kept up to date as the project changes. The sections between `<!-- BEGIN:x -->` and `<!-- END:x -->` are
-> generated: run `python make_readme.py` after changing any TOML, test file or command-line option.
+> generated: run `make docs` (or `python make_readme.py`) after changing any TOML, test file or command-line option. `make help` lists all targets.
 
 ## 1. Running
 
@@ -416,6 +416,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* `Makefile` (GNU make, e.g. `winget install ezwinports.make`): `make docs` regenerates the README auto sections and both drawio diagrams; also `make compile`, `selfcheck`, `view`, `clean-logs`; `make PYTHON=py docs` to change the interpreter.
 * Force window: slack cables are labelled SLACK, and an INTERNAL FIGHT banner appears when the cables carry far more than the resting sum while the bar pushes back (the two cancel in N). `--view` readout gains a 'formula check' per hitch: the cable-length formula evaluated at the measured pose minus the real tendon length (mm); ~0 means the formula includes the angles correctly.
 * `--view` opens a second window with a LIVE force diagram of one hitch (`forceview.py`): cable tensions, bar axial force, wheel thrust, net force on the trailer behind and a COMPRESSION banner; buttons pick the hitch, tare the resting tension and scale the arrows. `--view` now starts with the lead at `viewer.lead_speed_mps` (default 0).
 * Test files `t_short_bars` (bars 0.80-1.00 m instead of 1.00-1.50; tightest turn radius 2.62 m vs 3.27 m, no packaging warnings) and `t_ideal_hitch` (light trailers, no water). Bar ranges are read at startup only, so they are set in TOML.

@@ -1,0 +1,134 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<root binding="source" format="PlotJuggler" pj4_version="4">
+  <tabbed_widget id="" name="main" parent="main_window">
+    <Tab containers="1" id="611444ef-b93e-4162-8cb5-2ed9f8adc141" tab_name="Overview">
+      <Container>
+        <DockSplitter count="2" orientation="-" sizes="0.50000000;0.50000000">
+          <DockArea id="e505cdcb-827b-4c87-9662-55787ad3f584" name="Lead Heading (deg)">
+            <plot id="80151877-dda6-4599-94ee-6ab3983e9bae" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="pose/hdg_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="d94133a3-b5e4-4cde-be9b-6f4336fc2190" name="Peak Tension (N)">
+            <plot id="a20bffc0-17eb-4a6a-9121-6d7e0205569d" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="tension/peak_N" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+        </DockSplitter>
+      </Container>
+    </Tab>
+    <Tab containers="1" id="a8b064c5-9454-47ea-85f0-7823a0fd4654" tab_name="Joint 1">
+      <Container>
+        <DockSplitter count="6" orientation="-" sizes="0.16666667;0.16666667;0.16666667;0.16666667;0.16666667;0.16666667">
+          <DockArea id="162eaebd-552b-4a80-aa9d-156fde387b50" name="Yaw Tracking (deg)">
+            <plot id="1bff8113-1199-422c-a09c-1ed0638f0d67" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint1/yaw_cmd_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#ff7f0e" dataset_source="[stream] UDP Server" field="joint1/yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="9a210d5f-4c94-46ba-a45f-4579bec4aa7f" name="Bar Yaw (deg)">
+            <plot id="748198ef-8a63-449d-b610-1605bb5fce08" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint1/rear_yaw_cmd_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#17becf" dataset_source="[stream] UDP Server" field="joint1/rear_yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint1/front_yaw_cmd_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#ff7f0e" dataset_source="[stream] UDP Server" field="joint1/front_yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#7f7f7f" dataset_source="[stream] UDP Server" field="joint1/ball_yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="44a3e99b-3511-434b-849f-a8d0c76fce0f" name="Bar Yaw Torque (Nm)">
+            <plot id="e85d512f-017f-4af3-a48b-d02caf375531" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint1/rear_yaw_torque_Nm" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint1/front_yaw_torque_Nm" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="7edbd142-f261-4825-af93-8c7656dc87b0" name="Pitch &amp; Roll (deg)">
+            <plot id="9867414e-1f8c-4644-bc07-bdc67bb23556" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#2ca02c" dataset_source="[stream] UDP Server" field="joint1/pitch_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#9467bd" dataset_source="[stream] UDP Server" field="joint1/roll_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="aa08e779-e3f8-435f-bcd6-c09ed3f4140c" name="Axle Distance Error (mm)">
+            <plot id="19a205f8-f96b-41df-864e-af4ec669335d" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint1/axle_dist_err_mm" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="044e0b71-fcc7-4e67-ab31-e4941297a3de" name="Cable Tensions (N)">
+            <plot id="b86ca2c4-7778-4466-82ca-8c432c0fb64f" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint1/tension_tl_N" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#ff7f0e" dataset_source="[stream] UDP Server" field="joint1/tension_tr_N" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#2ca02c" dataset_source="[stream] UDP Server" field="joint1/tension_bl_N" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint1/tension_br_N" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+        </DockSplitter>
+      </Container>
+    </Tab>
+    <Tab containers="1" id="d141bb7e-3e05-4c76-96c8-a47ab193a263" tab_name="Joint 2">
+      <Container>
+        <DockSplitter count="6" orientation="-" sizes="0.16666667;0.16666667;0.16666667;0.16666667;0.16666667;0.16666667">
+          <DockArea id="9118e469-fe7d-4032-bcb0-38e2c584c263" name="Yaw Tracking (deg)">
+            <plot id="1a031b5a-ebd4-43ab-b697-f017c4c154c8" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint2/yaw_cmd_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#ff7f0e" dataset_source="[stream] UDP Server" field="joint2/yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="ceefcbb1-dc8b-4f74-8a16-000821e0df9c" name="Bar Yaw (deg)">
+            <plot id="6eb9c06c-553f-4675-880e-673188e0d5f3" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint2/rear_yaw_cmd_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#17becf" dataset_source="[stream] UDP Server" field="joint2/rear_yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint2/front_yaw_cmd_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#ff7f0e" dataset_source="[stream] UDP Server" field="joint2/front_yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#7f7f7f" dataset_source="[stream] UDP Server" field="joint2/ball_yaw_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="f09c12c8-c87b-433c-a30d-32ab27e1369f" name="Bar Yaw Torque (Nm)">
+            <plot id="e6a1e319-c932-4211-af0c-2ad2856df24d" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint2/rear_yaw_torque_Nm" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint2/front_yaw_torque_Nm" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="db1f3b74-8d85-4fd1-9b86-27772e21d119" name="Pitch &amp; Roll (deg)">
+            <plot id="98d14f8c-1bf4-4662-80ec-f5e63ba48645" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#2ca02c" dataset_source="[stream] UDP Server" field="joint2/pitch_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#9467bd" dataset_source="[stream] UDP Server" field="joint2/roll_meas_deg" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="c31b6e9a-0807-4fa1-8d91-d13308d34553" name="Axle Distance Error (mm)">
+            <plot id="fd9dcdbf-6aee-43b9-a800-80fd3581895e" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint2/axle_dist_err_mm" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+          <DockArea id="47d3acb9-119e-49ae-b550-723bbc6047c6" name="Cable Tensions (N)">
+            <plot id="bf7d1aa3-8533-48d2-9695-2138c0e6a167" line_width="1.0" mode="TimeSeries" style="Lines" title="" tracker_enabled="true">
+              <range bottom="-1.0" left="0.0" left_ns="0" right="10.0" right_ns="10000000000" top="1.0" x_basis="absolute" />
+              <curve color="#1f77b4" dataset_source="[stream] UDP Server" field="joint2/tension_tl_N" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#ff7f0e" dataset_source="[stream] UDP Server" field="joint2/tension_tr_N" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#2ca02c" dataset_source="[stream] UDP Server" field="joint2/tension_bl_N" markers_visible="false" topic="udp/data" visible="true" />
+              <curve color="#d62728" dataset_source="[stream] UDP Server" field="joint2/tension_br_N" markers_visible="false" topic="udp/data" visible="true" />
+            </plot>
+          </DockArea>
+        </DockSplitter>
+      </Container>
+    </Tab>
+    <currentTabIndex index="0" />
+  </tabbed_widget>
+  <data_processors />
+  <right_panel_state splitter_sizes="1569,0" style="2" width="1" />
+  <left_panel_state sources_tab="stream" streaming_buffer="101" streaming_source="UDP Server" />
+  <curve_list_state custom_filter="" datasets_filter="" show_topics="true" show_values="false" />
+  <chrome_state main_splitter_sizes="400,1135" />
+  <pinned_toolboxes />
+</root>

@@ -33,8 +33,10 @@
 
     <!-- Grounded plate under the pivot, paired motors and midpoint pulleys. -->
     <geom name="mounting_plate" type="box" pos="0.5875 0 0.055" size="0.2125 0.271 0.01" material="base_dark"/>
-    <geom name="pivot_pedestal" type="cylinder" pos="0.45 0 0.285" size="0.035 0.22" material="steel"/>
-    <geom name="pivot_bearing" type="cylinder" pos="0.45 0 0.495" size="0.035 0.018" material="pulley_gold"/>
+    <!-- Pedestal tops out at z=0.465 and the bearing at z=0.477, just under the tube lower wall (z=0.478). -->
+    <!-- Both are non-colliding: the tube_yaw hinge, not contact, locates the tube on the pivot. -->
+    <geom name="pivot_pedestal" type="cylinder" pos="0.45 0 0.265" size="0.035 0.20" material="steel" contype="0" conaffinity="0"/>
+    <geom name="pivot_bearing" type="cylinder" pos="0.45 0 0.471" size="0.035 0.006" material="pulley_gold" contype="0" conaffinity="0"/>
 
     <!-- The mirrored motor pair is at x=470 mm and y=+/-250 mm. -->
     <body name="left_motor" pos="0.47 -0.25 0.0975">

@@ -364,12 +364,14 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 \t<option timestep="{cfg.sim_timestep_s:g}" gravity="0 0 -{cfg.sim_gravity_mps2:g}" integrator="{cfg.sim_integrator}"/>
 \t<visual>
 \t\t<global offwidth="1280" offheight="720"/>
-\t\t<rgba haze="0.15 0.25 0.35 1"/>
+\t\t<headlight ambient="0.45 0.45 0.45" diffuse="0.8 0.8 0.8"/>
+\t\t<rgba haze="0.2 0.3 0.4 1"/>
 \t</visual>
 \t<asset>
-\t\t<texture type="skybox" builtin="gradient" rgb1="0.4 0.6 0.8" rgb2="0.1 0.15 0.2" width="512" height="512"/>
-\t\t<texture name="grid" type="2d" builtin="checker" rgb1="0.28 0.36 0.22" rgb2="0.33 0.42 0.26" width="512" height="512"/>
-\t\t<material name="paddock" texture="grid" texrepeat="20 20" reflectance="0.1"/>
+\t\t<texture type="skybox" builtin="gradient" rgb1="0.85 0.9 0.95" rgb2="0.2 0.3 0.4" width="512" height="512"/>
+\t\t<texture name="grid" type="2d" builtin="checker" rgb1="0.2 0.25 0.3" rgb2="0.3 0.35 0.4" width="512" height="512" mark="edge" markrgb="0.8 0.8 0.8"/>
+\t\t<material name="paddock" texture="grid" texrepeat="1 1" texuniform="true" reflectance="0.2"/>
+\t\t<material name="rut" rgba="0.38 0.42 0.47 1"/>
 \t\t<material name="chassis_lead" rgba="0.20 0.40 0.65 1"/>
 \t\t<material name="chassis_trl" rgba="0.25 0.55 0.35 1"/>
 \t\t<material name="drawbar" rgba="0.35 0.35 0.38 1"/>
@@ -379,9 +381,9 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 \t<worldbody>
 \t\t<light pos="0 0 8" dir="0 0 -1" diffuse="0.9 0.9 0.9"/>
 \t\t<geom name="ground" type="plane" size="50 50 0.1" material="paddock" friction="{cfg.ground_friction[0]:g} {cfg.ground_friction[1]:g} {cfg.ground_friction[2]:g}"/>
-\t\t<geom name="rut_1" type="box" pos="2.2 0.30 0.025" size="0.35 0.25 0.025" euler="0 5 0" material="paddock"/>
-\t\t<geom name="rut_2" type="box" pos="3.6 -0.30 0.030" size="0.40 0.25 0.030" euler="0 -6 0" material="paddock"/>
-\t\t<geom name="rut_3" type="box" pos="5.0 0.28 0.028" size="0.35 0.25 0.028" euler="4 0 0" material="paddock"/>
+\t\t<geom name="rut_1" type="box" pos="2.2 0.30 0.025" size="0.35 0.25 0.025" euler="0 5 0" material="rut"/>
+\t\t<geom name="rut_2" type="box" pos="3.6 -0.30 0.030" size="0.40 0.25 0.030" euler="0 -6 0" material="rut"/>
+\t\t<geom name="rut_3" type="box" pos="5.0 0.28 0.028" size="0.35 0.25 0.028" euler="4 0 0" material="rut"/>
 {trailers_xml}
 \t</worldbody>
 \t<tendon>

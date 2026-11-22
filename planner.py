@@ -37,6 +37,153 @@ def hitch_limited_curvature(L_r: float, L_f: float, psi_max_rad: float) -> float
     return 1.0 / hi
 
 
+# --- Three-part drawbar (bar tube pivot - centre part with one vertical yaw pin - bar tube pivot) ------------------
+# Plan view, left turn, lead trailer centre at the origin heading +x, turn centre O = (0, R). Hinges in series:
+#   psi_r  rear tube pivot on the lead trailer (cable-limited, about +-90 deg)
+#   theta  vertical clevis pin of the centre part (Balljoint part.fcmacro: pin 158 mm from the pitch pin)
+#   psi_f  front tube pivot on the follower
+# a = rear tube pivot -> yaw pin, b = yaw pin -> front tube pivot (each includes bars and the part's 158 mm span, whichever
+# side the yaw pin is on). Steady state: the follower axle's instantaneous centre is the same O as the lead's, which
+# fixes the follower pose from (psi_r, theta); psi_f is then whatever closes the chain. Positive angles = chain bends
+# towards the inside of a left turn (same magnitude for a right turn).
+
+def _wrap(a):
+    return (np.asarray(a, dtype=float) + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def three_part_closure(R, a, b, p, psi_r, theta):
+    """Steady-state closure on a circle of lead-axle radius R. psi_r, theta may be arrays.
+    Returns (psi_f, delta, Of_x, Of_y, phi_f, valid): delta = follower heading relative to the lead (inside-positive),
+    Of/phi_f = follower centre and heading in the lead frame, valid = False where the follower axle cannot be tangent."""
+    psi_r = np.asarray(psi_r, dtype=float)
+    theta = np.asarray(theta, dtype=float)
+    a2 = psi_r + theta
+    fx = -p - a * np.cos(psi_r) - b * np.cos(a2)             # follower front pivot
+    fy = a * np.sin(psi_r) + b * np.sin(a2)
+    dx, dy = fx, fy - R
+    d2 = dx * dx + dy * dy
+    valid = d2 >= p * p
+    rf = np.sqrt(np.maximum(d2 - p * p, 0.0))
+    phi_f = np.arctan2(dy, dx) - np.arctan2(p, rf) + math.pi / 2.0
+    delta = _wrap(-phi_f)
+    psi_f = _wrap(delta - a2)
+    return psi_f, delta, fx - p * np.cos(phi_f), fy - p * np.sin(phi_f), phi_f, valid
+
+
+def chassis_overlap(of_x, of_y, phi_f, half_len, half_width, clearance=0.0):
+    """True where the follower chassis rectangle overlaps the lead's (separating-axis test, lead at origin heading 0)."""
+    hl, hw = half_len + clearance, half_width + clearance
+    c, s = np.cos(phi_f), np.sin(phi_f)
+    axes = ((np.ones_like(c), np.zeros_like(c)), (np.zeros_like(c), np.ones_like(c)), (c, s), (-s, c))
+    separated = np.zeros(np.shape(c), dtype=bool)
+    for ux, uy in axes:
+        ra = hl * np.abs(ux) + hw * np.abs(uy)
+        rb = hl * np.abs(ux * c + uy * s) + hw * np.abs(-ux * s + uy * c)
+        separated |= np.abs(of_x * ux + of_y * uy) > ra + rb
+    return ~separated
+
+
+def _segment_hits_box(x0, y0, x1, y1, cx, cy, phi, half_len, half_width):
+    """True where segment (x0,y0)-(x1,y1) touches the rectangle centred (cx,cy) with heading phi (slab test)."""
+    c, s = np.cos(phi), np.sin(phi)
+    ax, ay = c * (x0 - cx) + s * (y0 - cy), -s * (x0 - cx) + c * (y0 - cy)
+    bx, by = c * (x1 - cx) + s * (y1 - cy), -s * (x1 - cx) + c * (y1 - cy)
+    tmin, tmax = np.zeros(np.shape(ax)), np.ones(np.shape(ax))
+    hit = np.ones(np.shape(ax), dtype=bool)
+    for a0, d, h in ((ax, bx - ax, half_len), (ay, by - ay, half_width)):
+        par = np.abs(d) < 1e-12
+        hit &= ~par | (np.abs(a0) <= h)
+        dd = np.where(par, 1.0, d)
+        t1, t2 = (-h - a0) / dd, (h - a0) / dd
+        tmin = np.where(par, tmin, np.maximum(tmin, np.minimum(t1, t2)))
+        tmax = np.where(par, tmax, np.minimum(tmax, np.maximum(t1, t2)))
+    return hit & (tmin <= tmax)
+
+
+@dataclass(frozen=True)
+class ThreePartHitch:
+    pivot_m: float = 0.40              # tube pivot distance from the trailer centre (chassis half length - pivot inset)
+    psi_max_deg: float = 90.0          # tube pivot limit (cable pull-back)
+    theta_max_deg: float = 85.0        # vertical clevis pin limit (fork ears / pin geometry; confirm on the part)
+    half_len_m: float = 0.45
+    half_width_m: float = 0.25
+    clearance_m: float = 0.02          # chassis-chassis keep-out
+    bars_clear_other_chassis: bool = True   # bars may not sweep through the neighbouring trailer's chassis outline
+    bars_in_chassis_plane: bool = False     # True: bars share the chassis height, so a bar may not cross its own chassis
+                                            # (limits the tube pivot to atan(half_width / pivot inset))
+    n_trailers: int = 5                     # chain length for the non-adjacent chassis check (1 or 2 = adjacent pair only)
+    tracking_tol: float | None = 0.03       # follower axle radius must stay within this fraction of the lead's (path
+                                            # tracking, as for the old equal-bar formula where R_f = R); None = ignore
+
+    def feasible(self, R, a, b, margin=1.0, step_deg=1.0):
+        """(ok, psi_r, theta, psi_f) -- best joint set at radius R (largest slack to the limits), or ok=False."""
+        psi_max = self.psi_max_deg
+        if self.bars_in_chassis_plane:
+            psi_max = min(psi_max, math.degrees(math.atan2(self.half_width_m, self.half_len_m - self.pivot_m)))
+        pm, tm = math.radians(psi_max) * margin, math.radians(self.theta_max_deg) * margin
+        pr = np.radians(np.arange(-psi_max * margin, psi_max * margin + 1e-9, step_deg))
+        th = np.radians(np.arange(-self.theta_max_deg * margin, self.theta_max_deg * margin + 1e-9, step_deg))
+        PR, TH = np.meshgrid(pr, th, indexing="ij")
+        pf, _, ox, oy, phi, valid = three_part_closure(R, a, b, self.pivot_m, PR, TH)
+        slack = np.minimum(np.minimum(pm - np.abs(PR), tm - np.abs(TH)), pm - np.abs(pf))
+        ok = valid & (slack >= 0.0) & ~chassis_overlap(ox, oy, phi, self.half_len_m, self.half_width_m, self.clearance_m)
+        if self.n_trailers > 2 and ok.any():
+            # Every hitch repeats the same joint set (tracking => same radius), so trailer k+1's pose follows from trailer k's.
+            hl, hw = self.half_len_m + self.clearance_m, self.half_width_m + self.clearance_m
+            poses = [(np.zeros_like(ox), np.zeros_like(ox), np.zeros_like(ox)), (ox, oy, phi)]
+            for _ in range(self.n_trailers - 2):
+                x, y, h = poses[-1]
+                c, s_ = np.cos(h), np.sin(h)
+                poses.append((x + c * ox - s_ * oy, y + s_ * ox + c * oy, h + phi))
+            for i in range(len(poses)):
+                for j in range(i + 2, len(poses)):
+                    xi, yi, hi = poses[i]
+                    xj, yj, hj = poses[j]
+                    c, s_ = np.cos(hi), np.sin(hi)                     # trailer j in trailer i's frame
+                    dx, dy = xj - xi, yj - yi
+                    ok &= ~chassis_overlap(c * dx + s_ * dy, -s_ * dx + c * dy, hj - hi, self.half_len_m, self.half_width_m, self.clearance_m)
+        if self.tracking_tol is not None:
+            ok &= np.abs(np.hypot(ox, oy - R) - R) <= max(self.tracking_tol * R, 0.01)
+        if self.bars_clear_other_chassis and ok.any():
+            hl, hw = self.half_len_m + self.clearance_m, self.half_width_m + self.clearance_m
+            px, yx, yy = -self.pivot_m, -self.pivot_m - a * np.cos(PR), a * np.sin(PR)
+            fx, fy = yx - b * np.cos(PR + TH), yy + b * np.sin(PR + TH)
+            ok &= ~_segment_hits_box(px, 0.0, yx, yy, ox, oy, phi, hl, hw)              # rear bar vs follower chassis
+            ok &= ~_segment_hits_box(yx, yy, fx, fy, 0.0, 0.0, 0.0, hl, hw)             # front bar vs lead chassis
+        if not ok.any():
+            return False, 0.0, 0.0, 0.0
+        i = np.unravel_index(np.argmax(np.where(ok, slack, -1.0)), ok.shape)
+        return True, float(PR[i]), float(TH[i]), float(pf[i])
+
+    def min_radius(self, a, b, margin=1.0, r_hi=10.0, r_lo=0.2, scan_m=0.05):
+        """Tightest lead-axle radius R such that every radius from R up to r_hi is feasible, for fixed arm lengths.
+        Scans downward from r_hi (feasibility is not monotonic once the whole chain's chassis outlines are checked, so
+        bisection alone could return a radius with an infeasible gap above it), then bisects the first failing step.
+        Returns inf if r_hi itself is infeasible."""
+        if not self.feasible(r_hi, a, b, margin)[0]:
+            return math.inf
+        good, r = r_hi, r_hi - scan_m
+        while r >= r_lo:
+            if not self.feasible(r, a, b, margin)[0]:
+                lo, hi = r, good
+                for _ in range(12):
+                    mid = 0.5 * (lo + hi)
+                    lo, hi = (lo, mid) if self.feasible(mid, a, b, margin)[0] else (mid, hi)
+                return hi
+            good, r = r, r - scan_m
+        return good
+
+    def best_min_radius(self, a_range, b_range, margin=1.0, n=5):
+        """Tightest radius over the adjustable arm lengths (variable bars shorten/lengthen as needed). (R, a, b)."""
+        best = (math.inf, a_range[0], b_range[0])
+        for a in np.linspace(a_range[0], a_range[1], n):
+            for b in np.linspace(b_range[0], b_range[1], n):
+                r = self.min_radius(float(a), float(b), margin)
+                if r < best[0]:
+                    best = (r, float(a), float(b))
+        return best
+
+
 @dataclass
 class PlanResult:
     points: np.ndarray

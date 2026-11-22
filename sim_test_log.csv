@@ -1,7 +1,7 @@
 # log_version: 1
-# git_commit: d63b15d-dirty
-# build_tag: v0.0-d63b15d
-# started: 2026-11-22T07:40:17
+# git_commit: 1b2ea7e
+# build_tag: v0.0-1b2ea7e
+# started: 2026-11-22T20:10:50
 # controller: VariableDrawbarController
 # TestName: Real mass layout (batt at axle, water mid) + short bars 0.80-1.00 m
 # test_sequence: 20-t_real_layout,t_short_bars

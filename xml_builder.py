@@ -379,7 +379,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
 \t\t<material name="cable_mat" rgba="0.90 0.25 0.15 1"/>
 \t</asset>
 \t<worldbody>
-\t\t<light pos="0 0 8" dir="0 0 -1" diffuse="0.9 0.9 0.9"/>
+\t\t<light pos="0 0 8" dir="0 0 -1" diffuse="0.9 0.9 0.9" directional="true"/>
 \t\t<geom name="ground" type="plane" size="50 50 0.1" material="paddock" friction="{cfg.ground_friction[0]:g} {cfg.ground_friction[1]:g} {cfg.ground_friction[2]:g}"/>
 \t\t<geom name="rut_1" type="box" pos="2.2 0.30 0.025" size="0.35 0.25 0.025" euler="0 5 0" material="rut"/>
 \t\t<geom name="rut_2" type="box" pos="3.6 -0.30 0.030" size="0.40 0.25 0.030" euler="0 -6 0" material="rut"/>

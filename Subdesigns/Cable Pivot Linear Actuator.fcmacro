@@ -1,0 +1,176 @@
+import FreeCAD as App
+import Part
+import math
+
+# Concept assembly: pivoting boom, opposed pull-pull capstans and a linear
+# actuator whose rod terminates in the M16/12 mm-pin clevis interface used by
+# "Balljoint part.fcmacro". Dimensions are millimetres.
+
+# --------------------------- editable dimensions ---------------------------
+TUBE_OD = 42.4
+TUBE_WALL = 3.2
+TUBE_LENGTH = 600.0
+PIVOT_PIN_DIA = 16.0
+PIVOT_PIN_LENGTH = 100.0
+BEARING_SPAN = 70.0
+
+MOTOR_DIA = 42.0
+MOTOR_LENGTH = 65.0
+CAPSTAN_DIA = 28.0
+CAPSTAN_WIDTH = 18.0
+CABLE_DIA = 2.0
+
+ACTUATOR_BODY_DIA = 48.0
+ACTUATOR_BODY_LENGTH = 190.0
+ROD_DIA = 16.0
+ROD_LENGTH = 110.0
+CLEVIS_GAP = 14.0
+CLEVIS_EAR = 6.0
+CLEVIS_PIN_DIA = 12.0
+CLEVIS_BODY_DIA = 26.0
+
+BASE_WIDTH = 150.0
+BASE_LENGTH = 110.0
+BASE_THICK = 10.0
+YOKE_GAP = 56.0
+YOKE_THICK = 8.0
+YOKE_HEIGHT = 95.0
+
+# Coordinate convention: boom axis X, pivot axis Z, vertical Y. The base is
+# below Y=0. Cable motors are arranged on opposite sides of the pivot.
+
+doc = App.newDocument("CablePivotLinearActuator")
+
+def add_part(name, shape, color, transparency=0):
+    obj = doc.addObject("Part::Feature", name.replace(" ", "_"))
+    obj.Label = name
+    obj.Shape = shape
+    obj.ViewObject.ShapeColor = color
+    obj.ViewObject.LineColor = (0.12, 0.12, 0.12)
+    obj.ViewObject.Transparency = transparency
+    return obj
+
+def cylinder_x(radius, length, x, y, z):
+    return Part.makeCylinder(radius, length, App.Vector(x, y, z), App.Vector(1, 0, 0))
+
+def cylinder_y(radius, length, x, y, z):
+    return Part.makeCylinder(radius, length, App.Vector(x, y, z), App.Vector(0, 1, 0))
+
+def cylinder_z(radius, length, x, y, z):
+    return Part.makeCylinder(radius, length, App.Vector(x, y, z), App.Vector(0, 0, 1))
+
+def tube_x(od, wall, length, x, y, z):
+    outer = cylinder_x(od / 2.0, length, x, y, z)
+    inner = cylinder_x(od / 2.0-wall, length+2, x-1, y, z)
+    return outer.cut(inner)
+
+def make_clevis():
+    """Female threaded clevis aligned along +X, matching the supplied macro."""
+    body_len, fork_len = 22.0, 32.0
+    fork_width = CLEVIS_GAP + 2*CLEVIS_EAR
+    fork_height = CLEVIS_BODY_DIA
+    body = cylinder_x(CLEVIS_BODY_DIA/2, body_len, 0, 0, 0)
+    body = body.cut(cylinder_x(8.0, body_len+2, -1, 0, 0))
+    fork = Part.makeBox(fork_len, fork_width, fork_height,
+                        App.Vector(body_len-2, -fork_width/2, -fork_height/2))
+    tipx = body_len + fork_len - fork_height/2
+    tip = Part.makeCylinder(fork_height/2, fork_width,
+                            App.Vector(tipx, -fork_width/2, 0), App.Vector(0,1,0))
+    trim = Part.makeBox(fork_height, fork_width+2, fork_height+2,
+                        App.Vector(tipx, -fork_width/2-1, -fork_height/2-1))
+    fork = fork.cut(trim).fuse(tip)
+    slot = Part.makeBox(fork_len+2, CLEVIS_GAP, fork_height+4,
+                        App.Vector(body_len+2, -CLEVIS_GAP/2, -fork_height/2-2))
+    fork = fork.cut(slot)
+    pinx = body_len + fork_len - fork_height/2
+    hole = Part.makeCylinder(CLEVIS_PIN_DIA/2, fork_width+4,
+                             App.Vector(pinx, -fork_width/2-2, 0), App.Vector(0,1,0))
+    return body.fuse(fork.cut(hole))
+
+# Ground support plate and two upright pivot cheeks.
+add_part("Ground mounting plate", Part.makeBox(BASE_LENGTH, BASE_THICK, BASE_WIDTH,
+         App.Vector(-55, -BASE_THICK, -BASE_WIDTH/2)), (0.30,0.32,0.35))
+for side in (-1, 1):
+    z0 = side * YOKE_GAP/2
+    cheek = Part.makeBox(YOKE_THICK, YOKE_HEIGHT, 42,
+                         App.Vector(-YOKE_THICK/2, 0, z0-21))
+    # pivot pin bore through each cheek
+    bore = cylinder_z(PIVOT_PIN_DIA/2+0.4, 50, -YOKE_THICK/2-1, 53, z0-25)
+    cheek = cheek.cut(bore)
+    add_part("Pivot support cheek " + ("L" if side < 0 else "R"), cheek, (0.42,0.45,0.49))
+
+# Boom tube, hollow so its section can be inspected by hiding this object.
+boom_y = 53.0
+add_part("Pivoting 42 mm tube", tube_x(TUBE_OD, TUBE_WALL, TUBE_LENGTH, 0, boom_y, 0),
+         (0.68,0.70,0.73), 8)
+
+# Pivot axle and bearing collars on both sides of the tube.
+add_part("Pivot axle", cylinder_z(PIVOT_PIN_DIA/2, PIVOT_PIN_LENGTH, 0, boom_y, -PIVOT_PIN_LENGTH/2),
+         (0.78,0.79,0.81))
+for side in (-1,1):
+    z = side*(TUBE_OD/2+4)
+    ring = cylinder_x(18, 12, -6, boom_y, z).cut(cylinder_x(8.2,14,-7,boom_y,z))
+    # orient collars around the vertical pivot axis
+    ring.rotate(App.Vector(0,boom_y,z), App.Vector(0,0,1), 90)
+    add_part("Pivot bearing collar " + str(side), ring, (0.78,0.65,0.28))
+
+# Opposed pull-pull motors and capstans, mounted either side of the pivot.
+for side in (-1,1):
+    z = side*(YOKE_GAP/2 + MOTOR_DIA/2 + 7)
+    motor = cylinder_x(MOTOR_DIA/2, MOTOR_LENGTH, -MOTOR_LENGTH/2, 14, z)
+    add_part("Pull motor " + ("L" if side < 0 else "R"), motor, (0.20,0.27,0.34))
+    shaft = cylinder_x(6, 14, MOTOR_LENGTH/2-1, 14, z)
+    add_part("Motor output shaft " + str(side), shaft, (0.72,0.73,0.75))
+    drum = cylinder_x(CAPSTAN_DIA/2, CAPSTAN_WIDTH, MOTOR_LENGTH/2+8, 14, z)
+    add_part("Cable capstan " + str(side), drum, (0.83,0.49,0.15))
+
+# Two cable runs extend along the boom and anchor at its far end. Slightly
+# separated in Y so both runs remain visible in the concept view.
+for side in (-1,1):
+    z = side*(YOKE_GAP/2 + MOTOR_DIA/2 + 7)
+    cable = cylinder_x(CABLE_DIA/2, TUBE_LENGTH-90, 38, 14, z)
+    add_part("Pull cable run " + str(side), cable, (0.85,0.20,0.16))
+    anchor = cylinder_y(4, 12, TUBE_LENGTH-55, 8, z)
+    add_part("Cable end anchor " + str(side), anchor, (0.75,0.75,0.78))
+
+# Linear actuator lies alongside the boom. The actuator body is fixed to the
+# tube by a saddle; its sliding rod reaches the M16 clevis at the far end.
+act_y = boom_y + 44
+body_start = TUBE_LENGTH - 285
+body = cylinder_x(ACTUATOR_BODY_DIA/2, ACTUATOR_BODY_LENGTH, body_start, act_y, 0)
+add_part("Linear actuator housing", body, (0.20,0.36,0.56))
+rear_cap = cylinder_x(ACTUATOR_BODY_DIA/2+2, 8, body_start-8, act_y, 0)
+add_part("Actuator rear cap", rear_cap, (0.30,0.32,0.35))
+rod_start = body_start + ACTUATOR_BODY_LENGTH - 2
+rod = cylinder_x(ROD_DIA/2, ROD_LENGTH, rod_start, act_y, 0)
+add_part("Actuator extension rod", rod, (0.82,0.83,0.85))
+
+# Saddle and two straps fixing actuator body to the pivoting tube.
+for x in (body_start+32, body_start+ACTUATOR_BODY_LENGTH-32):
+    saddle = Part.makeBox(34, 10, 66, App.Vector(x-17, boom_y+18, -33))
+    saddle = saddle.cut(cylinder_x(0.1,1,x,boom_y,0)) if False else saddle
+    add_part("Actuator mounting strap", saddle, (0.48,0.50,0.53))
+    foot = Part.makeBox(34, 12, 55, App.Vector(x-17, boom_y+12, -27.5))
+    add_part("Actuator saddle foot", foot, (0.55,0.57,0.60))
+
+# Threaded M16 adapter and female clevis fork, with the 12 mm pin axis across Y.
+adapter = cylinder_x(8, 18, rod_start+ROD_LENGTH, act_y, 0)
+add_part("M16 clevis adapter", adapter, (0.72,0.73,0.75))
+clevis = make_clevis()
+clevis.translate(App.Vector(rod_start+ROD_LENGTH+18, act_y, 0))
+add_part("Balljoint matching clevis", clevis, (0.55,0.58,0.62))
+pinx = rod_start+ROD_LENGTH+18+22+32-13
+pin = Part.makeCylinder(CLEVIS_PIN_DIA/2, CLEVIS_GAP+2*CLEVIS_EAR+8,
+                        App.Vector(pinx, act_y-CLEVIS_GAP/2-CLEVIS_EAR-4, 0), App.Vector(0,1,0))
+add_part("Clevis cross pin 12 mm", pin, (0.82,0.70,0.24))
+
+# Show the far-end mate centre as a simple ball joint target, sized around the
+# supplied 16 mm shaft interface. This is intentionally a separate concept part.
+ball = Part.makeSphere(12, App.Vector(pinx, act_y, 0))
+add_part("Mating ball joint concept", ball, (0.75,0.32,0.25), 15)
+
+doc.recompute()
+if App.GuiUp:
+    import FreeCADGui as Gui
+    Gui.activeDocument().activeView().viewIsometric()
+    Gui.activeDocument().activeView().fitAll()

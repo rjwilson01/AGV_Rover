@@ -1,4 +1,7 @@
-<mujoco model="cable_pivot_linear_actuator">
+<mujoco model="sector_drive_bar">
+  <!-- Pivoting boom driven by a sector gear fixed to the bar, a pinion and a planetary gearmotor, all under the plate.
+       Replaces the pull-pull cable/capstan drive (cable lever arm reached zero part-way through the swing).
+       Matches Subdesigns/drawbar/drawbar.fcmacro: macro z (mm) = (world z - 0.50) * 1000, tube pivot at x = 0.45 m. -->
   <compiler angle="radian" coordinate="local" autolimits="true"/>
   <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
 
@@ -22,45 +25,37 @@
     <material name="motor_dark" rgba="0.17 0.22 0.28 1"/>
     <material name="capstan_gold" rgba="0.86 0.48 0.12 1"/>
     <material name="pulley_gold" rgba="0.88 0.68 0.18 1"/>
-    <material name="cable_red" rgba="0.90 0.16 0.11 1"/>
     <material name="base_dark" rgba="0.24 0.26 0.29 1"/>
   </asset>
 
   <worldbody>
     <light pos="0.5 -1.5 2.5" diffuse="0.9 0.9 0.9" specular="0.3 0.3 0.3"/>
     <camera name="assembly_view" pos="1.1 -1.4 1.35" xyaxes="0.82 0.57 0 -0.27 0.39 0.88"/>
+    <camera name="under_view" pos="0.7 -0.9 0.15" xyaxes="0.8 0.6 0 -0.2 0.27 0.94"/>
     <geom name="ground" type="plane" pos="0.45 0 0" size="3 2 0.1" rgba="0.18 0.20 0.22 1"/>
 
-    <!-- Grounded plate under the pivot, paired motors and midpoint pulleys. -->
-    <geom name="mounting_plate" type="box" pos="0.5875 0 0.055" size="0.2125 0.271 0.01" material="base_dark"/>
-    <!-- Pedestal tops out at z=0.465 and the bearing at z=0.477, just under the tube lower wall (z=0.478). -->
-    <!-- Both are non-colliding: the tube_yaw hinge, not contact, locates the tube on the pivot. -->
-    <geom name="pivot_pedestal" type="cylinder" pos="0.45 0 0.265" size="0.035 0.20" material="steel" contype="0" conaffinity="0"/>
-    <geom name="pivot_bearing" type="cylinder" pos="0.45 0 0.471" size="0.035 0.006" material="pulley_gold" contype="0" conaffinity="0"/>
+    <!-- Plate (the trailer deck): macro z -45..-35 mm -> world 0.455..0.465, x 375..665 mm, y +/-150 mm. -->
+    <geom name="mounting_plate" type="box" pos="0.52 0 0.46" size="0.145 0.15 0.005" material="base_dark" contype="0" conaffinity="0"/>
+    <!-- Pivot cheeks either side of the tube (macro z +/-28..36 mm). Non-colliding: the tube_yaw hinge locates the tube. -->
+    <geom name="pivot_cheek_upper" type="box" pos="0.45 0 0.532" size="0.021 0.045 0.004" material="steel" contype="0" conaffinity="0"/>
+    <geom name="pivot_cheek_lower" type="box" pos="0.45 0 0.468" size="0.021 0.045 0.004" material="steel" contype="0" conaffinity="0"/>
 
-    <!-- The mirrored motor pair is at x=470 mm and y=+/-250 mm. -->
-    <body name="left_motor" pos="0.47 -0.25 0.0975">
-      <joint name="left_capstan_joint" type="hinge" axis="0 0 1" damping="0.02" armature="0.0002"/>
-      <geom name="left_motor_case" type="cylinder" size="0.021 0.0325" material="motor_dark" mass="0.30"/>
-      <geom name="left_capstan" type="cylinder" pos="0 0 0.048" size="0.014 0.009" material="capstan_gold" mass="0.04"/>
-      <site name="left_capstan_tangent" pos="0.014 0 0.057"/>
+    <!-- Grounded gearmotor under the plate: flange, hangers, 10:1 planetary stage and motor below the pinion. -->
+    <geom name="gearmotor_flange" type="box" pos="0.600 0 0.425" size="0.025 0.038 0.003" material="steel" contype="0" conaffinity="0"/>
+    <geom name="gearmotor_hanger_left" type="box" pos="0.600 -0.034 0.4465" size="0.025 0.004 0.0245" material="steel" contype="0" conaffinity="0"/>
+    <geom name="gearmotor_hanger_right" type="box" pos="0.600 0.034 0.4465" size="0.025 0.004 0.0245" material="steel" contype="0" conaffinity="0"/>
+    <geom name="planetary_gearbox" type="cylinder" pos="0.585 0 0.3945" size="0.021 0.0275" material="motor_dark" contype="0" conaffinity="0"/>
+    <geom name="drive_motor" type="cylinder" pos="0.585 0 0.3345" size="0.021 0.0325" material="motor_dark" mass="0.45" contype="0" conaffinity="0"/>
+
+    <!-- Pinion: 15 teeth, pitch radius 15 mm, meshing the sector at the neutral mesh point (x = 0.45 + 0.135 m). -->
+    <body name="drive_pinion" pos="0.585 0 0.4435">
+      <joint name="pinion_joint" type="hinge" axis="0 0 1" damping="0.01" armature="0.002"/>
+      <geom name="pinion_gear" type="cylinder" size="0.017 0.0075" material="pulley_gold" mass="0.05" contype="0" conaffinity="0"/>
+      <geom name="pinion_stub" type="cylinder" pos="0 0 -0.016" size="0.006 0.008" material="rod_steel" mass="0.02" contype="0" conaffinity="0"/>
+      <geom name="pinion_marker" type="box" pos="0.012 0 0.0085" size="0.005 0.002 0.001" rgba="0.9 0.1 0.1 1" mass="0.001" contype="0" conaffinity="0"/>
     </body>
-    <body name="right_motor" pos="0.47 0.25 0.0975">
-      <joint name="right_capstan_joint" type="hinge" axis="0 0 1" damping="0.02" armature="0.0002"/>
-      <geom name="right_motor_case" type="cylinder" size="0.021 0.0325" material="motor_dark" mass="0.30"/>
-      <geom name="right_capstan" type="cylinder" pos="0 0 0.048" size="0.014 0.009" material="capstan_gold" mass="0.04"/>
-      <site name="right_capstan_tangent" pos="0.014 0 0.057"/>
-    </body>
 
-    <!-- Redirect pulleys sit 250 mm off the bar centreline, halfway from -->
-    <!-- pivot to the far-end cable attachment, and in line with the motors. -->
-    <geom name="left_redirect_pulley" type="cylinder" pos="0.675 -0.25 0.50" size="0.024 0.005" material="pulley_gold"/>
-    <site name="left_pulley_side" pos="0.675 -0.29 0.50"/>
-    <geom name="right_redirect_pulley" type="cylinder" pos="0.675 0.25 0.50" size="0.024 0.005" material="pulley_gold"/>
-    <site name="right_pulley_side" pos="0.675 0.29 0.50"/>
-
-    <!-- Tube axis X, pivot axis Z. Open half-shell makes the internal actuator -->
-    <!-- visible. Dimensions: 900 mm long, 44 mm OD, 3.2 mm wall. -->
+    <!-- Tube axis X, pivot axis Z. Open half-shell makes the internal actuator visible. 900 mm long, 44 mm OD, 3.2 mm wall. -->
     <body name="pivoting_tube_and_actuator" pos="0.45 0 0.50">
       <joint name="tube_yaw" type="hinge" axis="0 0 1" range="-1.48353 1.48353" limited="true" damping="2" armature="0.01"/>
 
@@ -69,13 +64,33 @@
       <geom name="tube_side_wall_left" type="box" pos="0 -0.0204 -0.0094" size="0.45 0.0016 0.0094" material="tube_cutaway" density="7800"/>
       <geom name="tube_side_wall_right" type="box" pos="0 0.0204 -0.0094" size="0.45 0.0016 0.0094" material="tube_cutaway" density="7800"/>
 
+      <!-- Pivot axle (macro z -67..+50 mm) fixed to the tube; it carries the sector under the plate. -->
+      <geom name="pivot_axle" type="cylinder" fromto="0 0 -0.067 0 0 0.050" size="0.008" material="rod_steel" density="7800" contype="0" conaffinity="0"/>
+
+      <!-- Sector gear (macro z -64..-49 mm): 120 teeth, pitch radius 120 mm, +/-90 deg of teeth about +X. Approximated by
+           18 radial strips (total mass about 2.9 kg, matching the solid plate in the macro). -->
+      <geom name="sector_strip_00" type="box" pos="0.00689 -0.07870 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -1.48353" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_01" type="box" pos="0.02045 -0.07631 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -1.30900" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_02" type="box" pos="0.03339 -0.07160 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -1.13446" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_03" type="box" pos="0.04531 -0.06471 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -0.95993" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_04" type="box" pos="0.05586 -0.05586 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -0.78540" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_05" type="box" pos="0.06471 -0.04531 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -0.61087" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_06" type="box" pos="0.07160 -0.03339 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -0.43633" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_07" type="box" pos="0.07631 -0.02045 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -0.26180" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_08" type="box" pos="0.07870 -0.00689 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 -0.08727" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_09" type="box" pos="0.07870 0.00689 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 0.08727" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_10" type="box" pos="0.07631 0.02045 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 0.26180" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_11" type="box" pos="0.07160 0.03339 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 0.43633" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_12" type="box" pos="0.06471 0.04531 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 0.61087" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_13" type="box" pos="0.05586 0.05586 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 0.78540" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_14" type="box" pos="0.04531 0.06471 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 0.95993" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_15" type="box" pos="0.03339 0.07160 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 1.13446" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_16" type="box" pos="0.02045 0.07631 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 1.30900" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+      <geom name="sector_strip_17" type="box" pos="0.00689 0.07870 -0.0565" size="0.043 0.0105 0.0075" euler="0 0 1.48353" material="capstan_gold" mass="0.1611" contype="0" conaffinity="0"/>
+
       <!-- Internal 450 mm actuator housing occupies the open-end side. -->
       <geom name="actuator_housing" type="cylinder" pos="-0.225 0 0" size="0.016 0.217" quat="0.7071068 0 0.7071068 0" material="actuator_blue" density="7800" contype="0" conaffinity="0"/>
       <geom name="actuator_rear_cap" type="cylinder" pos="0.006 0 0" size="0.017 0.004" quat="0.7071068 0 0.7071068 0" material="steel" density="7800" contype="0" conaffinity="0"/>
-
-      <!-- Cable anchors at the far tube end, +/-22 mm from centreline. -->
-      <site name="tube_cable_anchor_left" pos="0.45 -0.022 0"/>
-      <site name="tube_cable_anchor_right" pos="0.45 0.022 0"/>
 
       <!-- 450 mm stroke. Reference is fully extended: clevis is about 450 mm -->
       <!-- beyond the open end; set reference to zero for minimum-length pose. -->
@@ -92,31 +107,28 @@
     </body>
   </worldbody>
 
-  <!-- Each pull cable runs from a tube-end anchor, wraps the grounded redirect -->
-  <!-- pulley, and terminates on its rotating capstan. Tendon stiffness keeps -->
-  <!-- the line tensioned; opposing motor torques yaw the tube. -->
-  <tendon>
-    <spatial name="left_pull_cable" width="0.002" rgba="0.9 0.16 0.11 1" stiffness="2500" damping="15" springlength="-1" limited="false">
-      <site site="tube_cable_anchor_left"/>
-      <geom geom="left_redirect_pulley" sidesite="left_pulley_side"/>
-      <site site="left_capstan_tangent"/>
-    </spatial>
-    <spatial name="right_pull_cable" width="0.002" rgba="0.9 0.16 0.11 1" stiffness="2500" damping="15" springlength="-1" limited="false">
-      <site site="tube_cable_anchor_right"/>
-      <geom geom="right_redirect_pulley" sidesite="right_pulley_side"/>
-      <site site="right_capstan_tangent"/>
-    </spatial>
-  </tendon>
+  <!-- Gear mesh: pinion angle = -(120/15) * bar yaw (external mesh reverses direction). 8:1 sector stage; the 10:1 planetary
+       stage and the 80% efficiency are folded into the motor gear below. -->
+  <equality>
+    <joint name="sector_mesh" joint1="pinion_joint" joint2="tube_yaw" polycoef="0 -8 0 0 0" solref="0.005 1" solimp="0.95 0.99 0.001"/>
+  </equality>
 
   <actuator>
-    <!-- Torque controls for the opposing capstan motors. -->
-    <motor name="left_capstan_motor" joint="left_capstan_joint" gear="1" ctrllimited="true" ctrlrange="-2 2" forcelimited="true" forcerange="-2 2"/>
-    <motor name="right_capstan_motor" joint="right_capstan_joint" gear="1" ctrllimited="true" ctrlrange="-2 2" forcelimited="true" forcerange="-2 2"/>
+    <!-- Torque control of the gearmotor. Motor peak 2 N.m, effective ratio 10 x 0.8 = 8 at the pinion, then 8:1 at the sector:
+         up to 2 x 8 x 8 = 128 N.m at the bar. Positive ctrl turns the pinion +Z, so the bar yaws -Z (negative). -->
+    <motor name="sector_drive_motor" joint="pinion_joint" gear="8" ctrllimited="true" ctrlrange="-2 2"/>
     <!-- Position target is actuator stroke: 0 = 450 mm, 0.45 = 900 mm. -->
     <position name="linear_actuator_position" joint="actuator_extension" kp="800" kv="80" ctrllimited="true" ctrlrange="0 0.45" forcelimited="true" forcerange="-2500 2500"/>
   </actuator>
 
+  <sensor>
+    <jointpos name="tube_yaw_angle" joint="tube_yaw"/>
+    <jointvel name="tube_yaw_rate" joint="tube_yaw"/>
+    <jointpos name="pinion_angle" joint="pinion_joint"/>
+  </sensor>
+
   <keyframe>
-    <key name="neutral_max_extension" qpos="0 0 0 0.45" ctrl="0 0 0.45"/>
+    <!-- qpos order: pinion_joint, tube_yaw, actuator_extension. ctrl order: sector_drive_motor, linear_actuator_position. -->
+    <key name="neutral_max_extension" qpos="0 0 0.45" ctrl="0 0.45"/>
   </keyframe>
 </mujoco>

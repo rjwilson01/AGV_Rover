@@ -2,32 +2,24 @@ import FreeCAD as App
 import Part
 import math
 
-# Concept assembly: pivoting boom, opposed pull-pull capstans and a linear
-# actuator whose rod terminates in the M16/12 mm-pin clevis interface used by
-# "Balljoint part.fcmacro". Dimensions are millimetres.
+# Concept assembly: pivoting boom driven by a toothed sector fixed to the bar, a pinion and a planetary gearmotor,
+# plus a linear actuator whose rod ends in the M16/12 mm-pin clevis interface used by "Balljoint part.fcmacro".
+# Replaces the earlier pull-pull cable/capstan drive, whose cable lever arm dropped to zero part way through the swing:
+# a sector concentric with the pivot gives the same lever arm (the sector pitch radius) at every angle.
+# Dimensions are millimetres. Z is the pivot axis, the bar yaws in the XY plane, neutral pose points along +X.
 
 # --------------------------- editable dimensions ---------------------------
 TUBE_OD = 44.0
 TUBE_WALL = 3.2
 TUBE_LENGTH = 900.0  # overall tube length, independent of actuator dimensions
 ACTUATOR_MIN_LENGTH = 450.0
-# The minimum actuator span locates the pivot from the open end. Overall tube
-# length determines the remaining pivot-to-cable-anchor reach.
+# The minimum actuator span locates the pivot from the open end.
 PIVOT_X = ACTUATOR_MIN_LENGTH
-PIVOT_TO_CABLE_ATTACHMENT_LENGTH = TUBE_LENGTH - PIVOT_X
-CABLE_ATTACHMENT_X = TUBE_LENGTH
-PULLEY_OFFSET_Y = 250.0
-PULLEY_X = PIVOT_X + PIVOT_TO_CABLE_ATTACHMENT_LENGTH / 2.0
+PIVOT_TO_TIP_LENGTH = TUBE_LENGTH - PIVOT_X
 CUTAWAY = True
 PIVOT_PIN_DIA = 16.0
-PIVOT_PIN_LENGTH = 100.0
 BEARING_SPAN = 70.0
-
-MOTOR_DIA = 42.0
-MOTOR_LENGTH = 65.0
-CAPSTAN_DIA = 28.0
-CAPSTAN_WIDTH = 18.0
-CABLE_DIA = 2.0
+YAW_LIMIT_DEG = 85.0  # mechanical stop either side of neutral
 
 ACTUATOR_BODY_DIA = 32.0  # fits within 37.6 mm tube bore with nominal clearance
 ACTUATOR_MAX_LENGTH = 900.0
@@ -41,16 +33,44 @@ CLEVIS_EAR = 6.0
 CLEVIS_PIN_DIA = 12.0
 CLEVIS_BODY_DIA = 26.0
 
-BASE_WIDTH = 2.0 * (PULLEY_OFFSET_Y + MOTOR_DIA/2.0 + 10.0)
-BASE_LENGTH = PULLEY_X - PIVOT_X + 200.0
-BASE_X = PIVOT_X - 75.0
+# Sector + pinion drive (all of it hangs UNDER the mounting plate, so nothing in the drive crosses the swept bar).
+SECTOR_MODULE = 2.0
+SECTOR_TEETH = 120            # sector pitch radius = module * teeth / 2 = 120 mm
+PINION_TEETH = 15             # pinion pitch radius = 15 mm (15 teeth: mild undercut, use a profile shift)
+SECTOR_FACE = 15.0            # gear face width
+SECTOR_ARC_DEG = 2.0 * (YAW_LIMIT_DEG + 5.0)   # 5 deg of extra teeth past each stop
+PLANETARY_RATIO = 10.0        # gearmotor reduction ahead of the pinion
+DRIVE_EFFICIENCY = 0.8        # whole train, motor to bar
+MOTOR_PEAK_TORQUE_NM = 2.0    # same cap as the simulation's drive motor
+MOTOR_DIA = 42.0
+MOTOR_LENGTH = 65.0
+GEARBOX_LENGTH = 55.0
+SECTOR_RATIO = SECTOR_TEETH / PINION_TEETH
+TOTAL_RATIO = SECTOR_RATIO * PLANETARY_RATIO
+BAR_TORQUE_NM = MOTOR_PEAK_TORQUE_NM * TOTAL_RATIO * DRIVE_EFFICIENCY   # about 128 N.m at the bar
+SECTOR_PITCH_R = SECTOR_MODULE * SECTOR_TEETH / 2.0
+PINION_PITCH_R = SECTOR_MODULE * PINION_TEETH / 2.0
+PINION_X = PIVOT_X + SECTOR_PITCH_R + PINION_PITCH_R
+
+# Layer heights (Z, mm). Bar at 0; plate under the bar; sector under the plate.
+PLATE_Z0 = -45.0
 BASE_THICK = 10.0
+SECTOR_GAP = 4.0
+SECTOR_Z1 = PLATE_Z0 - SECTOR_GAP
+SECTOR_Z0 = SECTOR_Z1 - SECTOR_FACE
+PIVOT_PIN_Z0 = SECTOR_Z0 - 3.0
+PIVOT_PIN_Z1 = 50.0
+PIVOT_PIN_LENGTH = PIVOT_PIN_Z1 - PIVOT_PIN_Z0
+STUB_LENGTH = 16.0
+FLANGE_THICK = 6.0
+FLANGE_Z1 = SECTOR_Z0 - 8.0
+
+BASE_X = PIVOT_X - 75.0
+BASE_LENGTH = 75.0 + SECTOR_PITCH_R + PINION_PITCH_R + 80.0
+BASE_WIDTH = 2.0 * (SECTOR_PITCH_R + 30.0)
 YOKE_GAP = 56.0
 YOKE_THICK = 8.0
 YOKE_HEIGHT = 95.0
-
-# Coordinate convention: tube axis X; yaw occurs in the XY plane; Z is the
-# normal to that plane and the pivot axis. Neutral pose points along +X.
 
 doc = App.newDocument("drawbar")
 
@@ -100,9 +120,9 @@ def make_clevis():
                              App.Vector(pinx, -fork_width/2-2, 0), App.Vector(0,1,0))
     return body.fuse(fork.cut(hole))
 
-# Ground support plate below pivot and motor pair, with cheeks along Z.
+# Ground support plate (the trailer deck) with pivot cheeks along Z.
 add_part("Ground mounting plate", Part.makeBox(BASE_LENGTH, BASE_WIDTH, BASE_THICK,
-         App.Vector(BASE_X, -BASE_WIDTH/2, -45)), (0.30,0.32,0.35))
+         App.Vector(BASE_X, -BASE_WIDTH/2, PLATE_Z0)), (0.30,0.32,0.35))
 for side in (-1, 1):
     z0 = side * (YOKE_GAP/2 + YOKE_THICK/2)
     cheek = Part.makeBox(42, YOKE_HEIGHT, YOKE_THICK,
@@ -123,44 +143,40 @@ if CUTAWAY:
 add_part("Pivoting 44 mm tube (longitudinal cutaway)", tube_shape,
          (0.68,0.70,0.73), 0)
 
-# Pivot axle and bearing collars on both sides of the tube.
-add_part("Z axis yaw pivot axle", cylinder_z(PIVOT_PIN_DIA/2, PIVOT_PIN_LENGTH, PIVOT_X, 0, -PIVOT_PIN_LENGTH/2),
+# Pivot axle: fixed to the tube, runs in the cheeks and the plate, and carries the sector below the plate.
+add_part("Z axis yaw pivot axle", cylinder_z(PIVOT_PIN_DIA/2, PIVOT_PIN_LENGTH, PIVOT_X, 0, PIVOT_PIN_Z0),
          (0.78,0.79,0.81))
 ring = cylinder_z(19, 12, PIVOT_X, 0, -6).cut(cylinder_z(8.2,14,PIVOT_X,0,-7))
 add_part("Yaw pivot bearing collar", ring, (0.78,0.65,0.28))
 
-# Grounded motors are mirrored in Y, on the plate and on the pulley side.
-# Their Y coordinates match the pulley centre lines.
-for side in (-1,1):
-    my = side*PULLEY_OFFSET_Y
-    mx = PIVOT_X + 20.0
-    motor = cylinder_z(MOTOR_DIA/2, MOTOR_LENGTH, mx, my, -BASE_THICK-35)
-    add_part("Pull motor " + ("L" if side < 0 else "R"), motor, (0.20,0.27,0.34))
-    shaft = cylinder_z(6, 14, mx, my, MOTOR_LENGTH/2)
-    add_part("Motor output shaft " + str(side), shaft, (0.72,0.73,0.75))
-    drum = cylinder_z(CAPSTAN_DIA/2, CAPSTAN_WIDTH, mx, my, MOTOR_LENGTH/2+12)
-    add_part("Cable capstan " + str(side), drum, (0.83,0.49,0.15))
-# Cable lines from far-end tube anchors to the redirect pulleys, then down to
-# the grounded capstans. Lines are schematic straight runs in this pose.
-for side in (-1,1):
-    my = side*PULLEY_OFFSET_Y
-    mx = PIVOT_X + 20.0
-    sx = PULLEY_X
-    sy = side*PULLEY_OFFSET_Y
-    sheave = cylinder_z(24, 10, sx, sy, -5)
-    add_part("Cable redirect pulley " + str(side), sheave, (0.86,0.67,0.20))
-    support = Part.makeBox(20,20,30,App.Vector(sx-10,sy-10,-35))
-    add_part("Redirect pulley support " + str(side), support, (0.42,0.45,0.49))
-    p0 = App.Vector(CABLE_ATTACHMENT_X-4, side*(TUBE_OD/2.0), 0)
-    p1 = App.Vector(sx, sy, 0)
-    v = p1.sub(p0)
-    add_part("Far end cable run " + str(side), Part.makeCylinder(CABLE_DIA/2,v.Length,p0,v.normalize()), (0.85,0.20,0.16))
-    anchor = cylinder_z(4,18,CABLE_ATTACHMENT_X-8,side*(TUBE_OD/2.0),-9)
-    add_part("Far end cable anchor " + str(side), anchor, (0.75,0.75,0.78))
-    p2 = App.Vector(sx, sy, 0)
-    p3 = App.Vector(mx, my, MOTOR_LENGTH/2+30)
-    v2 = p3.sub(p2)
-    add_part("Capstan lead " + str(side), Part.makeCylinder(CABLE_DIA/2,v2.Length,p2,v2.normalize()), (0.85,0.20,0.16))
+# Toothed sector (rim at the tip circle; tooth form not modelled), fixed to the axle, spanning the yaw range plus margin.
+tip_r = SECTOR_PITCH_R + SECTOR_MODULE
+sector = cylinder_z(tip_r, SECTOR_FACE, PIVOT_X, 0, SECTOR_Z0)
+half = math.radians(SECTOR_ARC_DEG / 2.0)
+far = 3.0 * tip_r
+wpts = [App.Vector(PIVOT_X, 0, SECTOR_Z0 - 1.0)]
+for k in range(5):
+    a = -half + 2.0 * half * k / 4.0
+    wpts.append(App.Vector(PIVOT_X + far * math.cos(a), far * math.sin(a), SECTOR_Z0 - 1.0))
+wpts.append(wpts[0])
+wedge = Part.Face(Part.makePolygon(wpts)).extrude(App.Vector(0, 0, SECTOR_FACE + 2.0))
+sector = sector.common(wedge)
+sector = sector.cut(cylinder_z(PIVOT_PIN_DIA/2, SECTOR_FACE + 2.0, PIVOT_X, 0, SECTOR_Z0 - 1.0))
+add_part("Drive sector (120T, module 2)", sector, (0.83,0.49,0.15))
+
+# Pinion, output stub, hanging bracket, planetary gearbox and motor, all grounded under the plate.
+add_part("Drive pinion (15T)", cylinder_z(PINION_PITCH_R + SECTOR_MODULE, SECTOR_FACE, PINION_X, 0, SECTOR_Z0),
+         (0.86,0.67,0.20))
+add_part("Pinion shaft stub", cylinder_z(6, STUB_LENGTH, PINION_X, 0, SECTOR_Z0 - STUB_LENGTH), (0.72,0.73,0.75))
+flange = Part.makeBox(50, 76, FLANGE_THICK, App.Vector(PINION_X-10, -38, FLANGE_Z1-FLANGE_THICK))
+add_part("Gearmotor mounting flange", flange, (0.42,0.45,0.49))
+for side in (-1, 1):
+    cheek = Part.makeBox(50, 8, PLATE_Z0 - (FLANGE_Z1-FLANGE_THICK) + FLANGE_THICK,
+                         App.Vector(PINION_X-10, side*34 - 4, FLANGE_Z1-FLANGE_THICK))
+    add_part("Gearmotor hanger " + ("L" if side < 0 else "R"), cheek, (0.42,0.45,0.49))
+gb_z0 = FLANGE_Z1 - FLANGE_THICK - GEARBOX_LENGTH
+add_part("Planetary gearbox (10:1)", cylinder_z(MOTOR_DIA/2, GEARBOX_LENGTH, PINION_X, 0, gb_z0), (0.30,0.36,0.44))
+add_part("Drive motor", cylinder_z(MOTOR_DIA/2, MOTOR_LENGTH, PINION_X, 0, gb_z0 - MOTOR_LENGTH), (0.20,0.27,0.34))
 
 # Actuator occupies the open-end side. Its minimum length determines the
 # open-end-to-pivot span; the remaining tube span reaches the cable anchor.
@@ -195,33 +211,27 @@ pin = Part.makeCylinder(CLEVIS_PIN_DIA/2, CLEVIS_GAP+2*CLEVIS_EAR+8,
                         App.Vector(pinx, boom_y-CLEVIS_GAP/2-CLEVIS_EAR-4, 0), App.Vector(0,1,0))
 add_part("Clevis cross pin 12 mm", pin, (0.82,0.70,0.24))
 
-# Record the desired yaw range in the model tree.
+# Record the desired yaw range and drive parameters in the model tree.
 yaw = doc.addObject("App::FeaturePython", "YawRangeNote")
-yaw.Label = "Yaw range: -85 deg to +85 deg from neutral"
-yaw.addProperty("App::PropertyAngle", "MinimumYaw", "Motion")
-yaw.MinimumYaw = -85
-yaw.addProperty("App::PropertyAngle", "MaximumYaw", "Motion")
-yaw.MaximumYaw = 85
-yaw.addProperty("App::PropertyLength", "TubeOD", "Dimensions")
-yaw.TubeOD = TUBE_OD
-yaw.addProperty("App::PropertyLength", "PivotToCableAttachmentLength", "Dimensions")
-yaw.PivotToCableAttachmentLength = PIVOT_TO_CABLE_ATTACHMENT_LENGTH
-yaw.addProperty("App::PropertyLength", "CableAttachmentX", "Dimensions")
-yaw.CableAttachmentX = CABLE_ATTACHMENT_X
-yaw.addProperty("App::PropertyLength", "TubeLength", "Dimensions")
-yaw.TubeLength = TUBE_LENGTH
-yaw.addProperty("App::PropertyBool", "CutawayView", "Configuration")
-yaw.CutawayView = CUTAWAY
-yaw.addProperty("App::PropertyLength", "PivotPositionX", "Dimensions")
-yaw.PivotPositionX = PIVOT_X
-yaw.addProperty("App::PropertyLength", "PulleyOffsetY", "Dimensions")
-yaw.PulleyOffsetY = PULLEY_OFFSET_Y
-yaw.addProperty("App::PropertyLength", "ActuatorMinLength", "Dimensions")
-yaw.ActuatorMinLength = ACTUATOR_MIN_LENGTH
-yaw.addProperty("App::PropertyLength", "ActuatorMaxLength", "Dimensions")
-yaw.ActuatorMaxLength = ACTUATOR_MAX_LENGTH
-yaw.addProperty("App::PropertyLength", "ActuatorDisplayedLength", "Dimensions")
-yaw.ActuatorDisplayedLength = ACTUATOR_LENGTH
+yaw.Label = "Yaw range: -85 deg to +85 deg from neutral (sector drive)"
+def add_prop(kind, name, group, value):
+    yaw.addProperty(kind, name, group)
+    setattr(yaw, name, value)
+add_prop("App::PropertyAngle", "MinimumYaw", "Motion", -YAW_LIMIT_DEG)
+add_prop("App::PropertyAngle", "MaximumYaw", "Motion", YAW_LIMIT_DEG)
+add_prop("App::PropertyLength", "TubeOD", "Dimensions", TUBE_OD)
+add_prop("App::PropertyLength", "TubeLength", "Dimensions", TUBE_LENGTH)
+add_prop("App::PropertyLength", "PivotToTipLength", "Dimensions", PIVOT_TO_TIP_LENGTH)
+add_prop("App::PropertyLength", "PivotPositionX", "Dimensions", PIVOT_X)
+add_prop("App::PropertyLength", "ActuatorMinLength", "Dimensions", ACTUATOR_MIN_LENGTH)
+add_prop("App::PropertyLength", "ActuatorMaxLength", "Dimensions", ACTUATOR_MAX_LENGTH)
+add_prop("App::PropertyLength", "ActuatorDisplayedLength", "Dimensions", ACTUATOR_LENGTH)
+add_prop("App::PropertyLength", "SectorPitchRadius", "Drive", SECTOR_PITCH_R)
+add_prop("App::PropertyLength", "PinionPitchRadius", "Drive", PINION_PITCH_R)
+add_prop("App::PropertyFloat", "PlanetaryRatio", "Drive", PLANETARY_RATIO)
+add_prop("App::PropertyFloat", "TotalRatio", "Drive", TOTAL_RATIO)
+add_prop("App::PropertyFloat", "BarTorqueNm", "Drive", BAR_TORQUE_NM)
+add_prop("App::PropertyBool", "CutawayView", "Configuration", CUTAWAY)
 
 doc.recompute()
 if App.GuiUp:

@@ -103,7 +103,7 @@ def _segment_hits_box(x0, y0, x1, y1, cx, cy, phi, half_len, half_width):
 @dataclass(frozen=True)
 class ThreePartHitch:
     pivot_m: float = 0.40              # tube pivot distance from the trailer centre (chassis half length - pivot inset)
-    psi_max_deg: float = 90.0          # tube pivot limit (cable pull-back)
+    psi_max_deg: float = 85.0          # tube pivot limit: mechanical stop of the sector drive (Subdesigns/drawbar)
     theta_max_deg: float = 85.0        # vertical clevis pin limit (fork ears / pin geometry; confirm on the part)
     half_len_m: float = 0.45
     half_width_m: float = 0.25

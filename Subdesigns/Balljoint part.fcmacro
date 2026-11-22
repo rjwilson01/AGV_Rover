@@ -84,7 +84,7 @@ def add_part(doc, name, shape, color, transparency=0):
 # ==============================================================================
 # BUILD ASSEMBLY
 # ==============================================================================
-doc = App.newDocument("Swivel_Coupling_Assembly")
+doc = App.newDocument("Balljoint Part-A")
 
 # 1. Stepped M16 Coupling Nut
 nut_body = make_hex_prism(NUT_AF, NUT_LEN, 0.0)

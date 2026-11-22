@@ -52,7 +52,7 @@ YOKE_HEIGHT = 95.0
 # Coordinate convention: tube axis X; yaw occurs in the XY plane; Z is the
 # normal to that plane and the pivot axis. Neutral pose points along +X.
 
-doc = App.newDocument("CablePivotLinearActuator")
+doc = App.newDocument("drawbar")
 
 def add_part(name, shape, color, transparency=0):
     obj = doc.addObject("Part::Feature", name.replace(" ", "_"))

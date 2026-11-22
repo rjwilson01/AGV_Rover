@@ -14,3 +14,4 @@ docs/architecture.png
 docs/architecture.svg
 
 sim_view_log.csv
+*.FCStd

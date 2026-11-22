@@ -1,0 +1,120 @@
+<mujoco model="cable_pivot_linear_actuator">
+  <compiler angle="radian" coordinate="local" autolimits="true"/>
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+  <visual>
+    <global offwidth="1400" offheight="900"/>
+    <quality shadowsize="2048"/>
+    <map znear="0.01" zfar="20"/>
+  </visual>
+
+  <default>
+    <joint damping="0.5" armature="0.002"/>
+    <geom friction="0.8 0.01 0.001" condim="3"/>
+    <site size="0.004" rgba="0.95 0.2 0.1 1"/>
+  </default>
+
+  <asset>
+    <material name="steel" rgba="0.42 0.45 0.49 1"/>
+    <material name="tube_cutaway" rgba="0.63 0.66 0.70 1"/>
+    <material name="actuator_blue" rgba="0.12 0.32 0.55 1"/>
+    <material name="rod_steel" rgba="0.82 0.84 0.86 1"/>
+    <material name="motor_dark" rgba="0.17 0.22 0.28 1"/>
+    <material name="capstan_gold" rgba="0.86 0.48 0.12 1"/>
+    <material name="pulley_gold" rgba="0.88 0.68 0.18 1"/>
+    <material name="cable_red" rgba="0.90 0.16 0.11 1"/>
+    <material name="base_dark" rgba="0.24 0.26 0.29 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0.5 -1.5 2.5" diffuse="0.9 0.9 0.9" specular="0.3 0.3 0.3"/>
+    <camera name="assembly_view" pos="1.1 -1.4 1.35" xyaxes="0.82 0.57 0 -0.27 0.39 0.88"/>
+    <geom name="ground" type="plane" pos="0.45 0 0" size="3 2 0.1" rgba="0.18 0.20 0.22 1"/>
+
+    <!-- Grounded plate under the pivot, paired motors and midpoint pulleys. -->
+    <geom name="mounting_plate" type="box" pos="0.5875 0 0.055" size="0.2125 0.271 0.01" material="base_dark"/>
+    <geom name="pivot_pedestal" type="cylinder" pos="0.45 0 0.285" size="0.035 0.22" material="steel"/>
+    <geom name="pivot_bearing" type="cylinder" pos="0.45 0 0.495" size="0.035 0.018" material="pulley_gold"/>
+
+    <!-- The mirrored motor pair is at x=470 mm and y=+/-250 mm. -->
+    <body name="left_motor" pos="0.47 -0.25 0.0975">
+      <joint name="left_capstan_joint" type="hinge" axis="0 0 1" damping="0.02" armature="0.0002"/>
+      <geom name="left_motor_case" type="cylinder" size="0.021 0.0325" material="motor_dark" mass="0.30"/>
+      <geom name="left_capstan" type="cylinder" pos="0 0 0.048" size="0.014 0.009" material="capstan_gold" mass="0.04"/>
+      <site name="left_capstan_tangent" pos="0.014 0 0.057"/>
+    </body>
+    <body name="right_motor" pos="0.47 0.25 0.0975">
+      <joint name="right_capstan_joint" type="hinge" axis="0 0 1" damping="0.02" armature="0.0002"/>
+      <geom name="right_motor_case" type="cylinder" size="0.021 0.0325" material="motor_dark" mass="0.30"/>
+      <geom name="right_capstan" type="cylinder" pos="0 0 0.048" size="0.014 0.009" material="capstan_gold" mass="0.04"/>
+      <site name="right_capstan_tangent" pos="0.014 0 0.057"/>
+    </body>
+
+    <!-- Redirect pulleys sit 250 mm off the bar centreline, halfway from -->
+    <!-- pivot to the far-end cable attachment, and in line with the motors. -->
+    <geom name="left_redirect_pulley" type="cylinder" pos="0.675 -0.25 0.50" size="0.024 0.005" material="pulley_gold"/>
+    <site name="left_pulley_side" pos="0.675 -0.29 0.50"/>
+    <geom name="right_redirect_pulley" type="cylinder" pos="0.675 0.25 0.50" size="0.024 0.005" material="pulley_gold"/>
+    <site name="right_pulley_side" pos="0.675 0.29 0.50"/>
+
+    <!-- Tube axis X, pivot axis Z. Open half-shell makes the internal actuator -->
+    <!-- visible. Dimensions: 900 mm long, 44 mm OD, 3.2 mm wall. -->
+    <body name="pivoting_tube_and_actuator" pos="0.45 0 0.50">
+      <joint name="tube_yaw" type="hinge" axis="0 0 1" range="-1.48353 1.48353" limited="true" damping="2" armature="0.01"/>
+
+      <!-- Longitudinal lower half-shell cutaway, tube local x = -450..+450. -->
+      <geom name="tube_lower_wall" type="box" pos="0 0 -0.0204" size="0.45 0.022 0.0016" material="tube_cutaway" density="7800"/>
+      <geom name="tube_side_wall_left" type="box" pos="0 -0.0204 -0.0094" size="0.45 0.0016 0.0094" material="tube_cutaway" density="7800"/>
+      <geom name="tube_side_wall_right" type="box" pos="0 0.0204 -0.0094" size="0.45 0.0016 0.0094" material="tube_cutaway" density="7800"/>
+
+      <!-- Internal 450 mm actuator housing occupies the open-end side. -->
+      <geom name="actuator_housing" type="cylinder" pos="-0.225 0 0" size="0.016 0.217" quat="0.7071068 0 0.7071068 0" material="actuator_blue" density="7800" contype="0" conaffinity="0"/>
+      <geom name="actuator_rear_cap" type="cylinder" pos="0.006 0 0" size="0.017 0.004" quat="0.7071068 0 0.7071068 0" material="steel" density="7800" contype="0" conaffinity="0"/>
+
+      <!-- Cable anchors at the far tube end, +/-22 mm from centreline. -->
+      <site name="tube_cable_anchor_left" pos="0.45 -0.022 0"/>
+      <site name="tube_cable_anchor_right" pos="0.45 0.022 0"/>
+
+      <!-- 450 mm stroke. Reference is fully extended: clevis is about 450 mm -->
+      <!-- beyond the open end; set reference to zero for minimum-length pose. -->
+      <body name="actuator_rod_and_clevis" pos="-0.45 0 0">
+        <joint name="actuator_extension" type="slide" axis="-1 0 0" range="0 0.45" ref="0.45" limited="true" damping="30" armature="0.02"/>
+        <geom name="actuator_rod" type="capsule" pos="0.225 0 0" size="0.008 0.217" quat="0.7071068 0 0.7071068 0" material="rod_steel" density="7800" contype="0" conaffinity="0"/>
+        <!-- Simplified clevis body, two ears and cross pin, using the supplied -->
+        <!-- macro's 14 mm gap, 6 mm ears and 12 mm pin dimensions. -->
+        <geom name="clevis_body" type="capsule" pos="-0.024 0 0" size="0.013 0.014" quat="0.7071068 0 -0.7071068 0" material="steel" density="7800" contype="0" conaffinity="0"/>
+        <geom name="clevis_ear_left" type="box" pos="-0.065 -0.01 0" size="0.016 0.003 0.013" material="steel" density="7800" contype="0" conaffinity="0"/>
+        <geom name="clevis_ear_right" type="box" pos="-0.065 0.01 0" size="0.016 0.003 0.013" material="steel" density="7800" contype="0" conaffinity="0"/>
+        <geom name="clevis_cross_pin" type="cylinder" pos="-0.065 0 0" size="0.006 0.013" quat="0.7071068 0.7071068 0 0" material="capstan_gold" density="7800" contype="0" conaffinity="0"/>
+      </body>
+    </body>
+  </worldbody>
+
+  <!-- Each pull cable runs from a tube-end anchor, wraps the grounded redirect -->
+  <!-- pulley, and terminates on its rotating capstan. Tendon stiffness keeps -->
+  <!-- the line tensioned; opposing motor torques yaw the tube. -->
+  <tendon>
+    <spatial name="left_pull_cable" width="0.002" rgba="0.9 0.16 0.11 1" stiffness="2500" damping="15" springlength="-1" limited="false">
+      <site site="tube_cable_anchor_left"/>
+      <geom geom="left_redirect_pulley" sidesite="left_pulley_side"/>
+      <site site="left_capstan_tangent"/>
+    </spatial>
+    <spatial name="right_pull_cable" width="0.002" rgba="0.9 0.16 0.11 1" stiffness="2500" damping="15" springlength="-1" limited="false">
+      <site site="tube_cable_anchor_right"/>
+      <geom geom="right_redirect_pulley" sidesite="right_pulley_side"/>
+      <site site="right_capstan_tangent"/>
+    </spatial>
+  </tendon>
+
+  <actuator>
+    <!-- Torque controls for the opposing capstan motors. -->
+    <motor name="left_capstan_motor" joint="left_capstan_joint" gear="1" ctrllimited="true" ctrlrange="-2 2" forcelimited="true" forcerange="-2 2"/>
+    <motor name="right_capstan_motor" joint="right_capstan_joint" gear="1" ctrllimited="true" ctrlrange="-2 2" forcelimited="true" forcerange="-2 2"/>
+    <!-- Position target is actuator stroke: 0 = 450 mm, 0.45 = 900 mm. -->
+    <position name="linear_actuator_position" joint="actuator_extension" kp="800" kv="80" ctrllimited="true" ctrlrange="0 0.45" forcelimited="true" forcerange="-2500 2500"/>
+  </actuator>
+
+  <keyframe>
+    <key name="neutral_max_extension" qpos="0 0 0 0.45" ctrl="0 0 0.45"/>
+  </keyframe>
+</mujoco>

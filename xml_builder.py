@@ -1,4 +1,4 @@
-from bar_geometry import bar_packaging_warnings, pivot_x_m, validate_bar_config
+from bar_geometry import bar_packaging_warnings, pivot_x_m, validate_bar_config, warn_once
 from config import AGVConfig
 
 SITE_CORNERS = (
@@ -305,7 +305,7 @@ def generate_mujoco_xml(cfg: AGVConfig) -> str:
     if bars:
         validate_bar_config(cfg)
         for w in bar_packaging_warnings(cfg):
-            print(f"[bars] WARNING: {w}")
+            warn_once("bars", w)
     trailers_xml = _build_trailer_body_bars(1, cfg) if bars else _build_trailer_body(1, cfg)
     tendons, wheel_acts, capstan_acts, slide_acts = [], [], [], []
     r_min, r_max = cfg.rear_bar_range_m

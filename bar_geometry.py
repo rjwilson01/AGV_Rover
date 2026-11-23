@@ -70,6 +70,18 @@ def validate_bar_config(cfg: AGVConfig) -> None:
             )
 
 
+_PRINTED_WARNINGS: set[str] = set()
+
+
+def warn_once(tag: str, msg: str) -> None:
+    """Print "[tag] WARNING: msg" the first time only. The viewer and config session rebuild the model on every change, so
+    unguarded prints repeat dozens of times; the viewer's model panel (viewmodel.py) still lists the current warnings."""
+    key = f"{tag}|{msg}"
+    if key not in _PRINTED_WARNINGS:
+        _PRINTED_WARNINGS.add(key)
+        print(f"[{tag}] WARNING: {msg}")
+
+
 def bar_packaging_warnings(cfg: AGVConfig) -> list[str]:
     """Mechanical sanity checks on the telescoping bars (tube outside the chassis, rod slides in from the ball end)."""
     p = pivot_x_m(cfg)

@@ -3,7 +3,7 @@ from collections import deque
 from collections.abc import Sequence
 import importlib
 import numpy as np
-from bar_geometry import pivot_x_m
+from bar_geometry import pivot_x_m, warn_once
 from planner import chain_curvature_limit, path_curvature, plan_path
 from config import AGVConfig
 
@@ -71,7 +71,7 @@ class BaseSnakeController(ABC):
             if k_chain > 0:
                 self.max_curvature = min(cfg.max_curvature, k_chain)
             for w in self.plan.warnings:
-                print(f"[planner] WARNING: {w}")
+                warn_once("planner", w)
         self.num_trailers = cfg.num_trailers
         self.num_joints = cfg.num_trailers - 1
         self.yaw_min_rad = np.deg2rad(cfg.yaw_angle_range_deg[0])

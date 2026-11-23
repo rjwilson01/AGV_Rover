@@ -43,7 +43,7 @@ compile:
 selfcheck:
 	$(PYTHON) selfcheck.py
 
-view:
+view: compile selfcheck
 	$(PYTHON) main.py VariableDrawbarController --view
 
 clean-logs:

@@ -263,6 +263,16 @@ def path_curvature(points: np.ndarray) -> np.ndarray:
 def chain_curvature_limit(cfg, margin: float = 0.85) -> float:
     """Hitch-limited curvature for this config. Variable bars can shorten to their minimum in tight turns."""
     var = cfg.rear_bar_range_m[1] > cfg.rear_bar_range_m[0] or cfg.front_bar_range_m[1] > cfg.front_bar_range_m[0]
+    if getattr(cfg, "planner_hitch_model", "legacy") == "three_part" and getattr(cfg, "bar_yaw_control", False):
+        a_rng = tuple(cfg.rear_bar_range_m) if var else (cfg.nominal_rear_bar_m,) * 2
+        b_rng = tuple(cfg.front_bar_range_m) if var else (cfg.nominal_front_bar_m,) * 2
+        p = cfg.chassis_half_len_m - cfg.bar_pivot_inset_m
+        psi_deg = min(abs(cfg.rear_bar_yaw_range_deg[0]), abs(cfg.rear_bar_yaw_range_deg[1]),
+                      abs(cfg.front_bar_yaw_range_deg[0]), abs(cfg.front_bar_yaw_range_deg[1]))
+        hitch = ThreePartHitch(pivot_m=p, psi_max_deg=psi_deg, half_len_m=cfg.chassis_half_len_m,
+                               half_width_m=cfg.chassis_half_width_m, n_trailers=cfg.num_trailers)
+        R = hitch.best_min_radius(a_rng, b_rng)[0]
+        return margin / R if math.isfinite(R) and R > 0 else 0.0
     if var:
         L_r, L_f = cfg.rear_bar_range_m[0], cfg.front_bar_range_m[0]
     else:

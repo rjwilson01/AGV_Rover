@@ -35,6 +35,9 @@ yaw_control = true
 rear_yaw_range_deg = [-25.0, 25.0]    # commanded yaw range of each rear tube (rear bar of trailer n)
 front_yaw_range_deg = [-25.0, 25.0]   # commanded yaw range of each front tube (front bar of trailer n+1)
 pivot_inset_m = 0.05                  # tube pivot sits this far inside the chassis end
+pin_spacing_m = 0.158                 # coupling part: pitch pin to yaw pin (Balljoint part.fcmacro). 0 = the old single ball joint. Bar lengths are measured to the YAW pin
+coupling_yaw_range_deg = 85.0         # yaw pin travel either side of straight
+coupling_swivel_range_deg = 45.0      # roll swivel travel either side of straight
 yaw_kp = 400.0                        # tube yaw position actuator gain (N*m per rad)
 yaw_kv = 20.0                         # tube yaw actuator damping (N*m per rad/s)
 yaw_max_torque_nm = 200.0

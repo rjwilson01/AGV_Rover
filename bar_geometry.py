@@ -14,6 +14,12 @@ trailer j+1 (behind), the kinematic chain is
     psi_f   front tube hinge angle (rotates trailer j+1 about its front pivot, relative to the tube)
     Rb      passive ball joint rotation Rz(yaw) Ry(pitch) Rx(roll)
 
+Coupling part (cfg.coupling_pin_spacing_m = d > 0, Balljoint part.fcmacro): the ball is really a pitch pin (horizontal),
+a roll swivel and a yaw pin (vertical) in a part d long: Rb = Ry(a) Rx(phi) Rz(b), and the bar lengths r, f are measured to
+the yaw pin. Then the rear rod ends at the pitch pin, d short of the yaw pin, and the yaw pin sits Ry(a) (-d, 0, 0) from it.
+With a = 0 this is exactly the single-ball geometry, so every planar law (tube yaw, wheel speeds, planner) is unchanged;
+the part only matters out of plane (pitch moves the yaw pin down by d sin a and back by d (1 - cos a)).
+
 With Rb = I the two bars form one straight line and the trailer-to-trailer yaw is psi_r + psi_f.
 Bar lengths r, f follow the existing meaning: distance from the trailer centre to the ball when
 the bar is straight (psi = 0).
@@ -51,6 +57,32 @@ def euler_from_matrix(R: np.ndarray) -> tuple[float, float, float]:
     yaw = np.arctan2(R[1, 0], R[0, 0])
     roll = np.arctan2(R[2, 1], R[2, 2])
     return float(yaw), float(pitch), float(roll)
+
+
+def hinge_angles_from_rotation(R: np.ndarray) -> tuple[float, float, float]:
+    """(pitch pin a, roll swivel phi, yaw pin b) with R = Ry(a) Rx(phi) Rz(b): the coupling part is a horizontal pitch pin,
+    a roll swivel, then a vertical yaw pin. Singular only at phi = +-90 deg (the two pins parallel)."""
+    phi = np.arcsin(np.clip(-R[1, 2], -1.0, 1.0))
+    return float(np.arctan2(R[0, 2], R[2, 2])), float(phi), float(np.arctan2(R[1, 0], R[1, 1]))
+
+
+def rotation_from_hinge_angles(a: float, phi: float, b: float) -> np.ndarray:
+    return rot_y(a) @ rot_x(phi) @ rot_z(b)
+
+
+def ball_ypr_from_joints(cfg: AGVConfig, data, n: int) -> tuple[float, float, float]:
+    """(yaw, pitch, roll) of hitch n's ball / coupling part, from whichever joints the model has."""
+    if cfg.coupling_pin_spacing_m > 0:
+        a = float(data.joint(f"pitch_pin_{n}").qpos.item())
+        phi = float(data.joint(f"swivel_{n}").qpos.item())
+        b = float(data.joint(f"yaw_pin_{n}").qpos.item())
+        return euler_from_matrix(rotation_from_hinge_angles(a, phi, b))
+    q = np.asarray(data.joint(f"ball_joint_{n}").qpos, dtype=float)
+    w, x, y, z = q / np.linalg.norm(q)
+    R = np.array([[1 - 2*(y*y + z*z), 2*(x*y - z*w), 2*(x*z + y*w)],
+                  [2*(x*y + z*w), 1 - 2*(x*x + z*z), 2*(y*z - x*w)],
+                  [2*(x*z - y*w), 2*(y*z + x*w), 1 - 2*(x*x + y*y)]])
+    return euler_from_matrix(R)
 
 
 def pivot_x_m(cfg: AGVConfig) -> float:
@@ -115,10 +147,16 @@ def hitch_transform(
     """Pose (R, t) of trailer j+1's frame in trailer j's frame."""
     p = pivot_x_m(cfg)
     s_r, s_f = r - p, f - p
+    d = cfg.coupling_pin_spacing_m
     Rb = ball_rotation(*ball_ypr)
     Rz_r, Rz_f = rot_z(psi_r), rot_z(psi_f)
 
-    t = np.array([-p, 0.0, 0.0]) + Rz_r @ np.array([-s_r, 0.0, 0.0])      # ball position in trailer j frame
+    # r and f are measured to the YAW pin. With a coupling part (d > 0) the rear rod ends d short of it, at the pitch pin,
+    # and the yaw pin sits d further along the part, which has swung through the pitch pin angle a.
+    t = np.array([-p, 0.0, 0.0]) + Rz_r @ np.array([-(s_r - d), 0.0, 0.0])    # pitch pin (ball position when d = 0)
+    if d != 0.0:
+        a = hinge_angles_from_rotation(Rb)[0]
+        t = t + Rz_r @ (rot_y(a) @ np.array([-d, 0.0, 0.0]))                  # yaw pin
     R = Rz_r @ Rb                                                          # front bar frame orientation
     t = t + R @ np.array([-s_f, 0.0, 0.0])                                 # front pivot
     R = R @ Rz_f                                                           # trailer j+1 orientation

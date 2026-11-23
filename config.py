@@ -94,6 +94,9 @@ class AGVConfig:
     rear_bar_yaw_range_deg: tuple[float, float] = (-25.0, 25.0)
     front_bar_yaw_range_deg: tuple[float, float] = (-25.0, 25.0)
     bar_pivot_inset_m: float = 0.05             # tube pivot sits this far inside the chassis end
+    coupling_pin_spacing_m: float = 0.0         # coupling part: pitch pin to yaw pin (0 = single ball joint, as before)
+    coupling_yaw_pin_range_deg: float = 85.0    # yaw pin travel either side of straight
+    coupling_swivel_range_deg: float = 45.0     # roll swivel travel either side of straight
     bar_yaw_kp: float = 400.0                   # tube yaw position actuator gain (N*m per rad)
     bar_yaw_kv: float = 20.0                    # tube yaw actuator damping (N*m per rad/s)
     bar_yaw_max_torque_nm: float = 200.0
@@ -142,6 +145,7 @@ class AGVConfig:
     # --- Path planner ---
     planner_enabled: bool = True
     planner_margin: float = 0.85               # fraction of the hitch yaw range the planner may use
+    planner_hitch_model: str = "legacy"        # "legacy" = hitch_angle formula; "three_part" = tube/yaw-pin/tube tracking + clearance model
     planner_spacing_m: float = 0.05
     planner_radius_cap_m: float = 8.0
     ref_dev_gain: float = 1.0                  # share of the lead's deviation from the ideal path passed on to followers (0 = pure ideal path)
@@ -438,6 +442,7 @@ def config_from_raw(raw: dict, infos: list[dict] | None = None) -> AGVConfig:
         follower_min_speed_frac=float(raw["controller"].get("follower_min_speed_frac", 0.3)),
         planner_enabled=bool(c.get("planner_enabled", True)),
         planner_margin=float(c.get("planner_margin", 0.85)),
+        planner_hitch_model=str(c.get("planner_hitch_model", "legacy")),
         planner_spacing_m=float(c.get("planner_spacing_m", 0.05)),
         planner_radius_cap_m=float(c.get("planner_radius_cap_m", 8.0)),
         planner_runout_m=float(c.get("planner_runout_m", 3.0)),
@@ -483,6 +488,9 @@ def config_from_raw(raw: dict, infos: list[dict] | None = None) -> AGVConfig:
         rear_bar_yaw_range_deg=tuple(float(x) for x in bars.get("rear_yaw_range_deg", (-25.0, 25.0))),
         front_bar_yaw_range_deg=tuple(float(x) for x in bars.get("front_yaw_range_deg", (-25.0, 25.0))),
         bar_pivot_inset_m=float(bars.get("pivot_inset_m", 0.05)),
+        coupling_pin_spacing_m=float(bars.get("pin_spacing_m", 0.0)),
+        coupling_yaw_pin_range_deg=float(bars.get("coupling_yaw_range_deg", 85.0)),
+        coupling_swivel_range_deg=float(bars.get("coupling_swivel_range_deg", 45.0)),
         bar_yaw_kp=float(bars.get("yaw_kp", 400.0)),
         bar_yaw_kv=float(bars.get("yaw_kv", 20.0)),
         bar_yaw_max_torque_nm=float(bars.get("yaw_max_torque_nm", 200.0)),

@@ -6,7 +6,7 @@ from __future__ import annotations
 import numpy as np
 
 from BaseSnakeController import quat_to_euler
-from bar_geometry import axle_distance
+from bar_geometry import axle_distance, ball_ypr_from_joints
 from ir_camera import relative_euler
 
 CORNER_SIGNS = (
@@ -68,7 +68,7 @@ def trailer_hitch_metrics(cfg, data, trailer_quats, joint_yaws, bar_yaws, joint_
             psi_r_cmd, psi_f_cmd = bar_yaws[j_idx]
             psi_r_meas = float(data.joint(f"yaw_rear_{n}").qpos.item())
             psi_f_meas = float(data.joint(f"yaw_front_{n + 1}").qpos.item())
-            b_yaw, b_pitch, b_roll = quat_to_euler(data.joint(f"ball_joint_{n}").qpos)
+            b_yaw, b_pitch, b_roll = ball_ypr_from_joints(cfg, data, n)
             out[f"joint{n}/rear_yaw_cmd_deg"] = round(float(np.rad2deg(psi_r_cmd)), 3)
             out[f"joint{n}/rear_yaw_meas_deg"] = round(float(np.rad2deg(psi_r_meas)), 3)
             out[f"joint{n}/front_yaw_cmd_deg"] = round(float(np.rad2deg(psi_f_cmd)), 3)

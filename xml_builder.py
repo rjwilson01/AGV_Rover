@@ -211,6 +211,7 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
     s_f_min, s_f_max = f_min - p, f_max - p      # pivot-to-ball reach of the front bar
     has_rear_slider = r_max > r_min
     has_front_slider = f_max > f_min
+    d = cfg.coupling_pin_spacing_m      # > 0: ball replaced by the pitch pin / swivel / yaw pin coupling part
     margin = cfg.bar_yaw_hinge_margin_deg
     rear_lo, rear_hi = cfg.rear_bar_yaw_range_deg[0] - margin, cfg.rear_bar_yaw_range_deg[1] + margin
     front_lo, front_hi = cfg.front_bar_yaw_range_deg[0] - margin, cfg.front_bar_yaw_range_deg[1] + margin
@@ -223,9 +224,25 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
     else:
         j_idx = idx - 1
         rod_len_f = max(0.05, s_f_min - 0.02)
-        add(0, f'<body name="t{idx}_front_socket" pos="0 0 0">')
-        add(1, f'<joint name="ball_joint_{j_idx}" type="ball" pos="0 0 0" '
-               f'damping="{cfg.ball_joint_damping}" limited="true" range="0 {cfg.ball_joint_limit_deg}"/>')
+        if d > 0:
+            # Coupling part: pitch pin (horizontal), roll swivel, yaw pin (vertical) d further along. Rb = Ry(a) Rx(phi) Rz(b).
+            sw, yw = cfg.coupling_swivel_range_deg, cfg.coupling_yaw_pin_range_deg
+            add(0, f'<body name="t{idx}_pitch_pin" pos="{d:.4f} 0 0">')
+            add(1, f'<joint name="pitch_pin_{j_idx}" type="hinge" axis="0 1 0" damping="{cfg.ball_joint_damping}" '
+                   f'limited="true" range="-{cfg.ball_joint_limit_deg:g} {cfg.ball_joint_limit_deg:g}"/>')
+            add(1, f'<body name="t{idx}_swivel" pos="0 0 0">')
+            add(2, f'<joint name="swivel_{j_idx}" type="hinge" axis="1 0 0" damping="{cfg.ball_joint_damping}" '
+                   f'limited="true" range="-{sw:g} {sw:g}"/>')
+            add(2, f'<body name="t{idx}_yaw_pin" pos="-{d:.4f} 0 0">')
+            add(3, f'<joint name="yaw_pin_{j_idx}" type="hinge" axis="0 0 1" damping="{cfg.ball_joint_damping}" '
+                   f'limited="true" range="-{yw:g} {yw:g}"/>')
+            add(3, f'<geom name="hitch_{j_idx}_coupling" type="capsule" fromto="{d:.4f} 0 0 0 0 0" size="0.016" '
+                   f'mass="0.5" material="drawbar" contype="0" conaffinity="0"/>')
+            add(3, f'<body name="t{idx}_front_socket" pos="0 0 0">')
+        else:
+            add(0, f'<body name="t{idx}_front_socket" pos="0 0 0">')
+            add(1, f'<joint name="ball_joint_{j_idx}" type="ball" pos="0 0 0" '
+                   f'damping="{cfg.ball_joint_damping}" limited="true" range="0 {cfg.ball_joint_limit_deg}"/>')
         add(1, f'<geom name="hitch_{j_idx}_ball" type="sphere" pos="0 0 0" size="0.036" material="cable_mat"/>')
         # Front bar (rod) is fixed to the ball socket and slides inside the front tube
         add(1, f'<geom name="t{idx}_drawbar_front_rod" type="capsule" fromto="0 0 0 -{rod_len_f:.3f} 0 0" '
@@ -284,7 +301,7 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
         if has_rear_slider:
             add(lv + 2, f'<joint name="slide_rear_{idx}" type="slide" axis="1 0 0" '
                         f'limited="true" range="0 {r_max - r_min:.4f}" damping="{cfg.bar_slide_damping:g}"/>')
-        add(lv + 2, f'<geom name="t{idx}_drawbar_rear_rod" type="capsule" fromto="{max(0.05, s_r_min - 0.02):.3f} 0 0 0 0 0" '
+        add(lv + 2, f'<geom name="t{idx}_drawbar_rear_rod" type="capsule" fromto="{max(0.05, s_r_min - 0.02):.3f} 0 0 {(f'{d:.4f}' if d > 0 else '0')} 0 0" '
                     f'size="0.022" mass="2.0" material="drawbar" contype="0" conaffinity="0"/>')
         out.append(_build_trailer_body_bars(idx + 1, cfg, depth + lv + 2))
         add(lv + 1, '</body>')
@@ -294,6 +311,8 @@ def _build_trailer_body_bars(idx: int, cfg: AGVConfig, depth: int = 2) -> str:
     if not is_lead:
         add(1, '</body>')           # front tube
         add(0, '</body>')           # front socket
+        if d > 0:
+            add(0, '</body></body></body>')    # yaw pin, swivel, pitch pin
     return "\n".join(out)
 
 

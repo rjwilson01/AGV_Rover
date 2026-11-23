@@ -54,6 +54,7 @@ follower_max_speed_frac = 2.0      # ... nor exceed this multiple of it
 follower_max_yaw_rate = 3.0        # rad/s limit on the yaw rate the follower wheel law may ask for
 planner_enabled = true             # Round waypoint corners with arcs and cap curvature at what the hitches can follow
 planner_margin = 0.85              # fraction of the hitch yaw range the planner may use
+planner_hitch_model = "legacy"     # "legacy" = hitch_angle formula; "three_part" = tube / yaw pin / tube model (tracking + chassis clearance), yaw-tube build only
 planner_spacing_m = 0.05
 planner_radius_cap_m = 8.0
 ref_dev_gain = 1.0                 # share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path)

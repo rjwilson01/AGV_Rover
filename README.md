@@ -261,13 +261,13 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `use_ir_camera_feedback` | false |  |  |  |
 | `cross_track_gain` | 0.55 |  |  | Pulls trailing axles onto the path (rad per meter of lateral error) |
 | `joint_angle_kp` | 0.35 |  |  | IR-camera joint angle P-trim against cable/tire scrub |
-| `joint_yaw_sign` | – | 1.0 |  | follower yaw relative to its leader is negative in a left turn |
-| `wheel_speed_from_ir` | – | true |  | follower wheel speeds from the measured (IR) joint yaw and hitch kinematics |
-| `v_center_mps` | – | 1.05 | 1.15 |  |
-| `lookahead_dist_m` | – | 1.60 | 1.65 |  |
-| `max_curvature` | – | 0.55 | 0.42 |  |
-| `yaw_gain` | – | -1.00 | -1.35 |  |
-| `actuator_lead_offset_m` | – | 0.35 | 0.40 |  |
+| `joint_yaw_sign` | â€“ | 1.0 |  | follower yaw relative to its leader is negative in a left turn |
+| `wheel_speed_from_ir` | â€“ | true |  | follower wheel speeds from the measured (IR) joint yaw and hitch kinematics |
+| `v_center_mps` | â€“ | 1.05 | 1.15 |  |
+| `lookahead_dist_m` | â€“ | 1.60 | 1.65 |  |
+| `max_curvature` | â€“ | 0.55 | 0.42 |  |
+| `yaw_gain` | â€“ | -1.00 | -1.35 |  |
+| `actuator_lead_offset_m` | â€“ | 0.35 | 0.40 |  |
 
 ### `[simulation]`
 
@@ -388,31 +388,31 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | Key | Default | Variable | Fixed | Description |
 |---|---|---|---|---|
 | `min_engagement_m` | 0.10 |  |  | build check: minimum rod-in-tube overlap at full extension (m) |
-| `yaw_control` | – | true |  | Each drawbar sits in a tube that pivots (yaw) near the trailer edge. The simulation commands the tube yaw angle directly (the real build drives it with pull/pull cables); the bar length is the separate slider actuator. The ball joint between the two bar tips is passive, and the 4 trailer-to-trailer cables are kept as on the Fixed build. Values below are PLACEHOLDERS - replace with the real build. |
-| `rear_yaw_range_deg` | – | [-25.0, 25.0] |  | commanded yaw range of each rear tube (rear bar of trailer n) |
-| `front_yaw_range_deg` | – | [-25.0, 25.0] |  | commanded yaw range of each front tube (front bar of trailer n+1) |
-| `pivot_inset_m` | – | 0.05 |  | tube pivot sits this far inside the chassis end |
-| `pin_spacing_m` | – | 0.158 |  | coupling part: pitch pin to yaw pin (Balljoint part.fcmacro). 0 = the old single ball joint. Bar lengths are measured to the YAW pin |
-| `coupling_yaw_range_deg` | – | 85.0 |  | yaw pin travel either side of straight |
-| `coupling_swivel_range_deg` | – | 45.0 |  | roll swivel travel either side of straight |
-| `yaw_kp` | – | 400.0 |  | tube yaw position actuator gain (N*m per rad) |
-| `yaw_kv` | – | 20.0 |  | tube yaw actuator damping (N*m per rad/s) |
-| `yaw_max_torque_nm` | – | 200.0 |  |  |
-| `yaw_damping` | – | 2.0 |  | passive hinge damping |
-| `yaw_hinge_margin_deg` | – | 5.0 |  | hinge stop sits this far beyond the commanded range |
+| `yaw_control` | â€“ | true |  | Each drawbar sits in a tube that pivots (yaw) near the trailer edge. The simulation commands the tube yaw angle directly (the real build drives it with pull/pull cables); the bar length is the separate slider actuator. The ball joint between the two bar tips is passive, and the 4 trailer-to-trailer cables are kept as on the Fixed build. Values below are PLACEHOLDERS - replace with the real build. |
+| `rear_yaw_range_deg` | â€“ | [-25.0, 25.0] |  | commanded yaw range of each rear tube (rear bar of trailer n) |
+| `front_yaw_range_deg` | â€“ | [-25.0, 25.0] |  | commanded yaw range of each front tube (front bar of trailer n+1) |
+| `pivot_inset_m` | â€“ | 0.05 |  | tube pivot sits this far inside the chassis end |
+| `pin_spacing_m` | â€“ | 0.158 |  | coupling part: pitch pin to yaw pin (Balljoint part.fcmacro). 0 = the old single ball joint. Bar lengths are measured to the YAW pin |
+| `coupling_yaw_range_deg` | â€“ | 85.0 |  | yaw pin travel either side of straight |
+| `coupling_swivel_range_deg` | â€“ | 45.0 |  | roll swivel travel either side of straight |
+| `yaw_kp` | â€“ | 400.0 |  | tube yaw position actuator gain (N*m per rad) |
+| `yaw_kv` | â€“ | 20.0 |  | tube yaw actuator damping (N*m per rad/s) |
+| `yaw_max_torque_nm` | â€“ | 200.0 |  |  |
+| `yaw_damping` | â€“ | 2.0 |  | passive hinge damping |
+| `yaw_hinge_margin_deg` | â€“ | 5.0 |  | hinge stop sits this far beyond the commanded range |
 
 ### `[drawbar]`
 
 | Key | Default | Variable | Fixed | Description |
 |---|---|---|---|---|
-| `controller_class` | – | "VariableDrawbarController" | "FixedDrawbarController" |  |
-| `mode` | – | "variable" | "fixed" |  |
-| `rear_bar_range_m` | – | [1.00, 1.50] | [0.80, 0.80] |  |
-| `front_bar_range_m` | – | [1.00, 1.50] | [0.80, 0.80] |  |
-| `yaw_angle_range_deg` | – | [-40.0, 50.0] | [-38.0, 38.0] | Limit on the commanded trailer-to-trailer yaw per hitch (rear bar yaw + front bar yaw + ball yaw). The per-bar tube limits are in [bars] below; ball_joint_limit_deg is the physical stop on the ball. |
-| `telescoping_kp` | – | 18000.0 | 15000.0 |  |
-| `telescoping_kv` | – | 900.0 | 800.0 |  |
-| `telescoping_max_force_n` | – | 8000.0 | 8000.0 |  |
+| `controller_class` | â€“ | "VariableDrawbarController" | "FixedDrawbarController" |  |
+| `mode` | â€“ | "variable" | "fixed" |  |
+| `rear_bar_range_m` | â€“ | [1.00, 1.50] | [0.80, 0.80] |  |
+| `front_bar_range_m` | â€“ | [1.00, 1.50] | [0.80, 0.80] |  |
+| `yaw_angle_range_deg` | â€“ | [-40.0, 50.0] | [-38.0, 38.0] | Limit on the commanded trailer-to-trailer yaw per hitch (rear bar yaw + front bar yaw + ball yaw). The per-bar tube limits are in [bars] below; ball_joint_limit_deg is the physical stop on the ball. |
+| `telescoping_kp` | â€“ | 18000.0 | 15000.0 |  |
+| `telescoping_kv` | â€“ | 900.0 | 800.0 |  |
+| `telescoping_max_force_n` | â€“ | 8000.0 | 8000.0 |  |
 
 <!-- END:params -->
 
@@ -441,12 +441,12 @@ Parameters that exist only in `[mass_layout]` when set: `battery_z_m` (battery h
 | `t_gnss_outage` | Lead GNSS fix lost 8-12 s: guard must hold (not trip) and the run should carry on. | gnss.outages_s=[[8.0, 12.0]] |
 | `t_gnss_outage_in_loop` | GNSS in the loop, fix lost 8-12 s. GNSS in the loop with the fix lost from 8 s to 12 s: dead reckoning on odometry and the gyro (the gyro drifts). | nav.gnss_in_loop=true, gnss.outages_s=[[8.0, 12.0]] |
 | `t_ideal_hitch` | ideal light hitch rig. "Ideal" hitch-mechanics rig: nearly massless trailers, no water, light wheels. Use with  --view --base fixed --no-friction. Mass cannot be exactly zero: MuJoCo rejects zero-mass moving bodies, and a near-zero mass against stiff actuators makes the integration stiff. These are the lightest values that stay sensible with the default actuator gains (untested in MuJoCo). | geometry.lead_dry_mass_kg=10.0, geometry.trailer_dry_mass_kg=10.0, geometry.wheel_mass_kg=0.5, tank_slosh.water_liters_per_trailer=0.0 |
-| `t_ideal_sensors` | Stage 1: perfect instruments. Any steering/path-following problem seen with this file is a control or physics problem, not a sensor problem. | ir_camera.noise_std_deg=0.0, ir_camera.latency_s=0.0, ir_camera.quantization_deg=0.0, imu.acc_noise_ug_rthz=[0.0, 0.0, 0.0], imu.acc_offset… |
+| `t_ideal_sensors` | Stage 1: perfect instruments. Any steering/path-following problem seen with this file is a control or physics problem, not a sensor problem. | ir_camera.noise_std_deg=0.0, ir_camera.latency_s=0.0, ir_camera.quantization_deg=0.0, imu.acc_noise_ug_rthz=[0.0, 0.0, 0.0], imu.acc_offsetâ€¦ |
 | `t_no_dev` | Return-leg experiment: followers follow the pure ideal path (no share of the lead's deviation from it). | controller.ref_dev_gain=0.0 |
-| `t_no_slosh` | Slosh cut 60x. Is the sloshing water driving the pitch mode? The moving mass is cut 60x (72 kg -> 1.2 kg) and its stiffness/damping are cut by the same factor, so the pendulum keeps its time constants (a tiny mass with the default damping is numerically unstable at a 2 ms step) but barely pushes on the carts. The water is not removed: the other 98% becomes fixed mass. | tank_slosh.slosh_mass_fraction=0.01, tank_slosh.slosh_roll_stiffness=1.08, tank_slosh.slosh_pitch_stiffness=0.58, tank_slosh.slosh_damping=… |
+| `t_no_slosh` | Slosh cut 60x. Is the sloshing water driving the pitch mode? The moving mass is cut 60x (72 kg -> 1.2 kg) and its stiffness/damping are cut by the same factor, so the pendulum keeps its time constants (a tiny mass with the default damping is numerically unstable at a 2 ms step) but barely pushes on the carts. The water is not removed: the other 98% becomes fixed mass. | tank_slosh.slosh_mass_fraction=0.01, tank_slosh.slosh_roll_stiffness=1.08, tank_slosh.slosh_pitch_stiffness=0.58, tank_slosh.slosh_damping=â€¦ |
 | `t_old_cables` | Return-leg experiment: size the hitch cables for the COMMANDED tube angles (behaviour before 24bcc2e). | controller.cable_use_measured_tubes=false |
 | `t_planner_off` | Old behaviour: raw waypoint polyline, curvature clipped only by max_curvature. | controller.planner_enabled=false |
-| `t_real_layout` | Real mass layout (batt at axle, water mid). Real mass layout, per cart: 110 kg dry INCLUDING a ~65 kg battery (10 kWh Li, 54 V) in a layer at axle height; 100 L of water spread over the full chassis footprint, so its centre is about the chassis centre. Water is nearly a full tank, so only 30% is modelled as slosh, hanging from a pivot at +0.12 m (bob at the centre). stiffness/damping scaled with the smaller slosh mass (30 kg vs 72 kg) so the pendulum stays well-conditioned | geometry.trailer_dry_mass_kg=110.0, mass_layout.battery_mass_kg=65.0, mass_layout.water_rigid_z_m=0.0, mass_layout.slosh_pivot_z_m=0.12, ta… |
+| `t_real_layout` | Real mass layout (batt at axle, water mid). Real mass layout, per cart: 110 kg dry INCLUDING a ~65 kg battery (10 kWh Li, 54 V) in a layer at axle height; 100 L of water spread over the full chassis footprint, so its centre is about the chassis centre. Water is nearly a full tank, so only 30% is modelled as slosh, hanging from a pivot at +0.12 m (bob at the centre). stiffness/damping scaled with the smaller slosh mass (30 kg vs 72 kg) so the pendulum stays well-conditioned | geometry.trailer_dry_mass_kg=110.0, mass_layout.battery_mass_kg=65.0, mass_layout.water_rigid_z_m=0.0, mass_layout.slosh_pivot_z_m=0.12, taâ€¦ |
 | `t_real_sensors` | Stage 2: realistic instruments (IR camera noise, delay and quantisation; BMI088 and ZED-F9P figures are the defaults). Compare against t_ideal_sensors: the difference is what the sensors cost you. | ir_camera.noise_std_deg=0.3, ir_camera.latency_s=0.05, ir_camera.quantization_deg=0.1 |
 | `t_rough_field` | Stage 3: add engine/cutter-blade vibration on the IMU on top of t_real_sensors. | imu.vibration_g_rms=0.3 |
 | `t_short_bars` | short bars 0.80-1.00 m. Shorter telescoping bars (current 1.00-1.50 m look long against a 0.9 m chassis). Bar length = trailer centre to ball. Pivot is 0.40 m from the centre, so 0.80-1.00 m leaves 0.40-0.60 m of bar beyond the pivot. Needs a rebuild: set at startup only. | drawbar.rear_bar_range_m=[0.80, 1.00], drawbar.front_bar_range_m=[0.80, 1.00] |
@@ -491,6 +491,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* README.md and `make_readme.py` are now UTF-8. The file had been a mix (hand-written text UTF-8, generated blocks written as Windows cp1252 because `read_text()`/`write_text()` used the locale encoding). `make_readme.py` now names `encoding="utf-8"` on every read and write, so it behaves the same on Windows and Linux. Generated blocks carry an AUTO-GENERATED comment.
 * Cable sizing: new test `t_walk_cable_load` (4.4 km/h = 1.22 m/s round the orchard U-turn, cable anchors 200 mm / +-150 mm, `loadcell.bar_enabled = true`) and `cable_sizing.py`, which reads a run log and prints per-cable peak tension, travel and peak speed (plus drum rpm / turns / torque with `--drum-dia-mm`) and the bar axial range. New CSV channel `joint<N>/bar_axial_true_N`: the bar force straight from the interaction force, without the load-cell filter, noise or quantisation (logged alongside `bar_axial_N`). Not yet run in MuJoCo.
 * Planner: three-part drawbar model (`ThreePartHitch`, `three_part_closure` in `planner.py`) for the `Balljoint part.fcmacro` coupling (tube pivot - 158 mm part with one vertical yaw pin - tube pivot). Steady-state closure reduces to `hitch_angle` for straight tubes. With +-85 deg hinges (the sector-drive mechanical stop) the pair hitch angle no longer limits the turn; the limit is path tracking plus whole-train chassis clearance (R_min about 0.6-0.95 m for 3 trailers, 1.1-1.7 m for 5). Kinematic only, not yet wired into `chain_curvature_limit`; 85 deg pin limit still to confirm on the part.
 * `--view` **Record telemetry** tick box: streams the same channels as a normal run (UDP for PlotJuggler, which launches with `--plotjuggler` or `simulation.launch_plotjuggler`) and writes `sim_view_log.csv`, from the sandbox state, plus `view/*` channels with the set-points and algorithm switches. Untick to save. The sandbox has no GNSS / IMU / guard models, so those channels are absent. The telemetry gathering that `main.py` did inline now lives in `telemetry_pack.py`, shared by both (a stand-in run of `main.py` gives byte-identical rows). `--plotjuggler` is no longer ignored in `--view`.

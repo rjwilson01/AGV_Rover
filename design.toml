@@ -96,7 +96,19 @@ exit_dir = ["TBD", "TBD", "TBD"]   # unit vector, tangent to drum
 max_fleet_angle_deg = 1.5
 actuator = "TBD"
 position_sensor = "TBD"
-position_accuracy_m = "TBD"     # derive: allowed tension error / cable stiffness. The earlier +/-0.5 mm was only an estimate (actuator_options_2026-11-23), not from a control response
+# Per cable. First-order estimate from [tracking] (see the derivation there), NOT yet checked in the sim: compare
+# joint<N>/cable_<corner>_err_mm with the lateral tracking error in a run. Tension accuracy may matter more (strain gauge loop).
+position_accuracy_m = 0.001
+
+# Trailer position requirement (tree clearance in the orchard).
+[tracking]
+trailer_position_tol_m = 0.015      # +/-15 mm target with active hitch control
+passive_position_error_m = 0.300    # ~300 mm without it (user's earlier figure; meaning to be confirmed)
+# Cable-length share of the +/-15 mm budget, first-order geometry (estimate):
+#   hitch yaw error  = cable length error / (2 x 0.20 m lever)  = 2.5 mrad per mm
+#   at the next trailer, ~1.25 m from the hitch (bar + half chassis) = ~3 mm of position per mm of cable error
+#   so 1 mm per cable costs ~3 mm of the 15 mm; errors accumulate along the chain, hence 1 mm rather than 2-3 mm.
+cable_error_budget_share = 0.2
 
 [sim]
 reverse_wheel_sign_fixed = true

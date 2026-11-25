@@ -96,7 +96,7 @@ exit_dir = ["TBD", "TBD", "TBD"]   # unit vector, tangent to drum
 max_fleet_angle_deg = 1.5
 actuator = "TBD"
 position_sensor = "TBD"
-position_accuracy_m = 0.0005    # target +/-0.5 mm
+position_accuracy_m = "TBD"     # derive: allowed tension error / cable stiffness. The earlier +/-0.5 mm was only an estimate (actuator_options_2026-11-23), not from a control response
 
 [sim]
 reverse_wheel_sign_fixed = true

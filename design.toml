@@ -96,14 +96,16 @@ exit_dir = ["TBD", "TBD", "TBD"]   # unit vector, tangent to drum
 max_fleet_angle_deg = 1.5
 actuator = "TBD"
 position_sensor = "TBD"
-# Per cable. First-order estimate from [tracking] (see the derivation there), NOT yet checked in the sim: compare
+# Per cable, needed only down the rows (near-straight hitch angles; the turn can be coarser). First-order estimate
+# from [tracking] (see the derivation there), NOT yet checked in the sim: compare
 # joint<N>/cable_<corner>_err_mm with the lateral tracking error in a run. Tension accuracy may matter more (strain gauge loop).
 position_accuracy_m = 0.001
 
-# Trailer position requirement (tree clearance in the orchard).
+# Trailer position requirement. The tight figure applies ONLY while travelling down the rows (cutters working
+# beside the trees); the U-turn at the row end has no such limit.
 [tracking]
-trailer_position_tol_m = 0.015      # +/-15 mm target with active hitch control
-passive_position_error_m = 0.300    # ~300 mm without it (user's earlier figure; meaning to be confirmed)
+in_row_position_tol_m = 0.015       # +/-15 mm down the rows, to keep the cutters clear of the trees
+alternative_position_tol_m = 0.300  # the alternative under discussion (what it replaces / allows: to be written down)
 # Cable-length share of the +/-15 mm budget, first-order geometry (estimate):
 #   hitch yaw error  = cable length error / (2 x 0.20 m lever)  = 2.5 mrad per mm
 #   at the next trailer, ~1.25 m from the hitch (bar + half chassis) = ~3 mm of position per mm of cable error

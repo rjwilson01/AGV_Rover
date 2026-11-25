@@ -1,0 +1,15 @@
+# Cable-actuator sizing run: walking pace plus 10 % (4.4 km/h = 1.22 m/s) round the orchard U-turn, with the cable anchors at the
+# planned hitch dimensions (200 mm either side of the bar, +-150 mm above/below it) and the bar axial load logged.
+# Read the result with:  python cable_sizing.py sim_test_log.csv
+# Logs per hitch: joint<N>/bar_axial_true_N (noise-free) and bar_axial_N (through the load cell), the four cable tensions
+# (joint<N>/tension_<corner>_N, loadcell_<corner>_N) and the cable lengths (joint<N>/cable_<corner>_meas_m).
+[test]
+TestName = "Walking pace 4.4 km/h, cable sizing (anchors 200/150 mm, bar load logged)"
+duration_s = 40
+[controller]
+v_center_mps = 1.22
+[geometry]
+cable_anchor_y_m = 0.20
+cable_anchor_z_m = 0.15
+[loadcell]
+bar_enabled = true

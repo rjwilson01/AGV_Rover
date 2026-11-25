@@ -1,0 +1,103 @@
+# design.toml - single source of truth for AGV_Rover hardware.
+# Readers: FreeCAD macros, MuJoCo model generator, controllers, planner.
+# Convention: SI units (m, N, kg, rad->deg where the key ends in _deg).
+# Values marked "TBD" = null-equivalent; fill from measurement or bar load log.
+# Source of each number noted in `src` where known.
+
+schema_version = 1
+
+[chassis]
+length_m = 0.9
+width_m = 0.5
+bar_pivot_inset_m = 0.40        # bar pivot measured in from chassis centre
+
+[drawbar]
+tube_od_m = 0.044
+tube_bore_m = 0.0376
+length_m = { min = 0.8, max = 1.0 }
+yaw_limit_deg = 85              # mechanical stop
+pin_dia_m = 0.012               # drawbar.fcmacro assumption
+fork_gap_m = 0.014              # drawbar.fcmacro assumption
+
+[drawbar.yaw_drive]
+type = "sector_gear"
+sector_teeth = 120
+module_mm = 2
+pinion_teeth = 15
+gearbox_ratio = 10              # planetary
+torque_at_bar_Nm = 128
+
+# Reusable hinge chain: pin - roll swivel - pin. Used on the drawbar AND on
+# every cable hitch point.
+[hinge_chain.default]
+axes = ["Y_pin", "X_swivel", "Z_pin"]   # as in Subdesigns/Shaftmodel.xml
+pin_limit_deg = 85
+swivel_singularity_deg = 90
+pin_spacing_m = 0.158           # ball is NOT a point; hitch_transform must use this
+worst_case_deg = { pitch = 25, yaw = 40, swivel = 25 }
+
+[cable]
+diameter_m = 0.003
+preload_offset_m = 0.002        # cable_preload_offset_m
+min_bend_radius_m = 0.030       # 10 x diameter, rule of thumb. Check vs cable type
+# Cable type/construction: TBD (steel 7x7 vs Dyneema changes sheave size)
+construction = "TBD"
+breaking_load_N = "TBD"
+working_tension_N = { nominal = "TBD", peak = "TBD" }   # from sim bar load log
+
+# Layout: four-corner. Add one [[hitch_point]] per corner.
+[[hitch_point]]
+id = "FL"
+chain = "default"
+end = "passive"
+strain_gauge = "sg_hitch"
+anchor_trailer = "B"
+pos_m = ["TBD", "TBD", "TBD"]   # in trailer B chassis frame
+
+[[hitch_point]]
+id = "FR"
+chain = "default"
+end = "passive"
+strain_gauge = "sg_hitch"
+anchor_trailer = "B"
+pos_m = ["TBD", "TBD", "TBD"]
+
+[[hitch_point]]
+id = "RL"
+chain = "default"
+end = "passive"
+strain_gauge = "sg_hitch"
+anchor_trailer = "B"
+pos_m = ["TBD", "TBD", "TBD"]
+
+[[hitch_point]]
+id = "RR"
+chain = "default"
+end = "passive"
+strain_gauge = "sg_hitch"
+anchor_trailer = "B"
+pos_m = ["TBD", "TBD", "TBD"]
+
+[strain_gauge.sg_hitch]
+location = "hitch end of cable"
+retention = "two ring nuts"
+model = "TBD"
+capacity_N = "TBD"
+accuracy_N = "TBD"
+
+# Active end: one per cable. Exit point = where cable leaves drum, in trailer A frame.
+[[active_end]]
+id = "FL"
+type = "drum"                   # "drum" (anchored) or "capstan" (friction)
+drum_dia_m = "TBD"              # >= bend radius x2, see notes
+groove_pitch_m = "TBD"
+exit_pos_m = ["TBD", "TBD", "TBD"]
+exit_dir = ["TBD", "TBD", "TBD"]   # unit vector, tangent to drum
+max_fleet_angle_deg = 1.5
+actuator = "TBD"
+position_sensor = "TBD"
+position_accuracy_m = 0.0005    # target +/-0.5 mm
+
+[sim]
+reverse_wheel_sign_fixed = true
+# Planner currently assumes two equal bars / point hitch: needs three-part drawbar version.

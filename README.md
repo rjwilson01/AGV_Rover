@@ -232,6 +232,7 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `follower_max_yaw_rate` | 3.0 |  |  | rad/s limit on the yaw rate the follower wheel law may ask for |
 | `planner_enabled` | true |  |  | Round waypoint corners with arcs and cap curvature at what the hitches can follow |
 | `planner_margin` | 0.85 |  |  | fraction of the hitch yaw range the planner may use |
+| `planner_hitch_model` | "legacy" |  |  | "legacy" = hitch_angle formula; "three_part" = tube / yaw pin / tube model (tracking + chassis clearance), yaw-tube build only |
 | `planner_spacing_m` | 0.05 |  |  |  |
 | `planner_radius_cap_m` | 8.0 |  |  |  |
 | `ref_dev_gain` | 1.0 |  |  | share of the lead's deviation from the ideal path passed to followers (0 = pure ideal path) |
@@ -389,6 +390,9 @@ Value shown = `common.toml`; the Variable / Fixed columns show a controller-spec
 | `rear_yaw_range_deg` | – | [-25.0, 25.0] |  | commanded yaw range of each rear tube (rear bar of trailer n) |
 | `front_yaw_range_deg` | – | [-25.0, 25.0] |  | commanded yaw range of each front tube (front bar of trailer n+1) |
 | `pivot_inset_m` | – | 0.05 |  | tube pivot sits this far inside the chassis end |
+| `pin_spacing_m` | – | 0.158 |  | coupling part: pitch pin to yaw pin (Balljoint part.fcmacro). 0 = the old single ball joint. Bar lengths are measured to the YAW pin |
+| `coupling_yaw_range_deg` | – | 85.0 |  | yaw pin travel either side of straight |
+| `coupling_swivel_range_deg` | – | 45.0 |  | roll swivel travel either side of straight |
 | `yaw_kp` | – | 400.0 |  | tube yaw position actuator gain (N*m per rad) |
 | `yaw_kv` | – | 20.0 |  | tube yaw actuator damping (N*m per rad/s) |
 | `yaw_max_torque_nm` | – | 200.0 |  |  |
@@ -449,6 +453,7 @@ Parameters that exist only in `[mass_layout]` when set: `battery_z_m` (battery h
 | `t_two_trailers` | Two-trailer train: the simplest set-up for impulse / step-response studies (use with --drive). | geometry.num_trailers=2 |
 | `t_w30_p03` | Wheels 0.30 m, axle +0.03 (clearance 0.15). Wheels 0.30 m, axle 0.03 m ABOVE the chassis centre (batteries ride with the axle): body height 0.27 m, chassis clearance 0.15 m. Use together with t_real_layout. | geometry.wheel_radius_m=0.30, geometry.wheel_z_offset_m=0.03 |
 | `t_w35_p03` | Wheels 0.35 m, axle +0.03 (clearance 0.20). Wheels 0.35 m, axle 0.03 m ABOVE the chassis centre: body height 0.32 m, chassis clearance 0.20 m (= original). | geometry.wheel_radius_m=0.35, geometry.wheel_z_offset_m=0.03 |
+| `t_walk_cable_load` | Walking pace 4.4 km/h, cable sizing (anchors 200/150 mm, bar load logged). Cable-actuator sizing run: walking pace plus 10 % (4.4 km/h = 1.22 m/s) round the orchard U-turn, with the cable anchors at the planned hitch dimensions (200 mm either side of the bar, +-150 mm above/below it) and the bar axial load logged. Read the result with:  python cable_sizing.py sim_test_log.csv Logs per hitch: joint<N>/bar_axial_true_N (noise-free) and bar_axial_N (through the load cell), the four cable tensions (joint<N>/tension_<corner>_N, loadcell_<corner>_N) and the cable lengths (joint<N>/cable_<corner>_meas_m). | controller.v_center_mps=1.22, geometry.cable_anchor_y_m=0.20, geometry.cable_anchor_z_m=0.15, loadcell.bar_enabled=true |
 | `t_wheel_ir` | Wheel speeds from IR yaw. Follower wheel speeds from the MEASURED joint yaw (IR camera) via the hitch kinematics, instead of from the commanded yaw. Lead follows the pure-pursuit curvature. | controller.wheel_speed_from_ir=true |
 | `t_wide_uturn` | Wider U-turn (radius >= ~3.4 m) that the hitch-limited planner can follow without saturating. | controller.active_path="u_turn_wide" |
 | `t_yaw_cables_only` | yaw-only cables (anchors at bar height). Cables at bar height: the top and bottom anchors coincide (z = 0), so the four cables become two yaw-only pairs. Cable length then barely depends on ball pitch/roll (about 4 mm and 1 mm per 10 deg instead of ~30 mm for pitch), but the cables no longer restrain pitch or roll at all. Compare the return leg and cable tensions against t_real_layout. | geometry.cable_anchor_z_m=0.0 |
@@ -483,6 +488,7 @@ Header lines start with `# ` (`log_version`, `git_commit`, `build_tag`, `started
 
 ## 9. Change log (newest first)
 
+* Cable sizing: new test `t_walk_cable_load` (4.4 km/h = 1.22 m/s round the orchard U-turn, cable anchors 200 mm / +-150 mm, `loadcell.bar_enabled = true`) and `cable_sizing.py`, which reads a run log and prints per-cable peak tension, travel and peak speed (plus drum rpm / turns / torque with `--drum-dia-mm`) and the bar axial range. New CSV channel `joint<N>/bar_axial_true_N`: the bar force straight from the interaction force, without the load-cell filter, noise or quantisation (logged alongside `bar_axial_N`). Not yet run in MuJoCo.
 * Planner: three-part drawbar model (`ThreePartHitch`, `three_part_closure` in `planner.py`) for the `Balljoint part.fcmacro` coupling (tube pivot - 158 mm part with one vertical yaw pin - tube pivot). Steady-state closure reduces to `hitch_angle` for straight tubes. With +-85 deg hinges (the sector-drive mechanical stop) the pair hitch angle no longer limits the turn; the limit is path tracking plus whole-train chassis clearance (R_min about 0.6-0.95 m for 3 trailers, 1.1-1.7 m for 5). Kinematic only, not yet wired into `chain_curvature_limit`; 85 deg pin limit still to confirm on the part.
 * `--view` **Record telemetry** tick box: streams the same channels as a normal run (UDP for PlotJuggler, which launches with `--plotjuggler` or `simulation.launch_plotjuggler`) and writes `sim_view_log.csv`, from the sandbox state, plus `view/*` channels with the set-points and algorithm switches. Untick to save. The sandbox has no GNSS / IMU / guard models, so those channels are absent. The telemetry gathering that `main.py` did inline now lives in `telemetry_pack.py`, shared by both (a stand-in run of `main.py` gives byte-identical rows). `--plotjuggler` is no longer ignored in `--view`.
 * Parameters window: dependencies. Choosing `Fixed` (class or mode) also sets `bars.yaw_control = false`, which fixes the `[bars] yaw_control = true requires drawbar mode = "variable"` crash on reload; `[[require]]` rules in `ui.toml`; Reload XML validates first and refuses with the reason instead of exiting.

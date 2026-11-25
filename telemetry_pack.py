@@ -127,4 +127,7 @@ def loadcell_metrics(cfg, model, data, forces, tendon_names, cable_cells, bar_ce
             axis = np.asarray(data.xmat[b_id]).reshape(3, 3)[:, 0]
             f_bar = cfg.bar_force_sign * float(np.dot(np.asarray(data.cfrc_int[b_id])[3:], axis))
             lc[f"joint{j_h + 1}/bar_axial_N"] = round(bar_cells[j_h].measure(float(data.time), f_bar), 2)
+            # Unfiltered, noise-free value from the same interaction force: for sizing actuators and cables, where the
+            # load-cell low-pass, noise and quantisation would only blur the peaks.
+            lc[f"joint{j_h + 1}/bar_axial_true_N"] = round(f_bar, 2)
     return lc

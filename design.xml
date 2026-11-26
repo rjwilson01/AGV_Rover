@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  design.xml - single source of truth for AGV_Rover hardware.
+  Readers (planned): FreeCAD macros, MuJoCo model generator, controllers, planner. Nothing reads it yet.
+  Replaces design.toml (XML allows comments and per-value annotations; the repo already uses XML for Subdesigns).
+
+  HOW TO READ A VALUE
+    <name unit="m" status="design" src="where it came from">0.003</name>
+    Value is the element text. Attributes (all optional except status on a value):
+      unit    SI unit of the value. Angles are in degrees (unit="deg"). Plain numbers have no unit.
+      status  how far to trust it:
+                design    chosen or measured for the real build
+                model     value the simulator uses today (configs/*.toml); may differ from the build
+                assumed   placeholder to replace once the real part or number is known
+                estimate  first-order calculation or rule of thumb, not yet checked
+                derived   computed from other values in this file or from a stated script
+                tbd       unknown: the element is left empty. A loader must check status before parsing the text.
+      src     file, note or conversation the number came from
+    Longer reasoning goes in comments directly above the element it explains.
+
+  CONVENTIONS
+    Units are SI (m, N, kg, s) with angles in degrees. Frames: trailer A is the one carrying the cable motors
+    (active end), trailer B carries the passive hitch end and its strain gauge. Cable corners use the simulator's names
+    (telemetry_pack.CORNER_SIGNS and the CSV columns joint[N]/cable_[corner]_*): t/b = top/bottom, l/r = left/right.
+    Every trailer-to-trailer hitch repeats the same hitch description below.
+-->
+<design schema_version="2">
+
+  <!-- ===== Trailer chassis. The simulator uses a 0.9 x 0.5 m box. ===== -->
+  <chassis>
+    <length unit="m" status="model" src="configs/common.toml [geometry] chassis_half_len_m x 2">0.9</length>
+    <width unit="m" status="model" src="configs/common.toml [geometry] chassis_half_width_m x 2">0.5</width>
+    <!-- Bars are measured from the chassis centre. 0.40 m from centre = 0.05 m inside the chassis end, which is the
+         sim's [bars] pivot_inset_m = 0.05. (design.toml called this "inset" but meant from centre.) -->
+    <bar_pivot_from_centre unit="m" status="model" src="handoff_2026-11-22 (turning limits)">0.40</bar_pivot_from_centre>
+  </chassis>
+
+  <!-- ===== Drawbar: a tube that yaws on a vertical pivot at the trailer edge, with a linear actuator inside. ===== -->
+  <drawbar>
+    <tube_od unit="m" status="design" src="actuator_options_2026-11-23 (current tube)">0.044</tube_od>
+    <tube_bore unit="m" status="design" src="actuator_options_2026-11-23">0.0376</tube_bore>
+    <!-- The 42 mm stepper and 46 mm S200 actuators do NOT fit this 37.6 mm bore, so the tube or the actuator placement
+         changes. Open item. -->
+    <!-- 0.8 to 1.0 m is the short-bar test range in the sim. The new three-part design is N to N + half a trailer length. -->
+    <length_min unit="m" status="model" src="configs/test/t_short_bars.toml; handoff_2026-11-22">0.8</length_min>
+    <length_max unit="m" status="model" src="configs/test/t_short_bars.toml">1.0</length_max>
+    <yaw_limit unit="deg" status="design" src="actuator_options_2026-11-23: mechanical stop, either side of straight">85</yaw_limit>
+    <!-- The drawbar.fcmacro placeholders: replace with the real clevis eye once the actuator is chosen. -->
+    <pin_dia unit="m" status="assumed" src="drawbar.fcmacro">0.012</pin_dia>
+    <fork_gap unit="m" status="assumed" src="drawbar.fcmacro">0.014</fork_gap>
+
+    <!-- Yaw drive replaced the pull-pull cable drive, whose lever arm reached zero near 48 deg. -->
+    <yaw_drive type="sector_gear">
+      <sector_teeth status="design" src="actuator_options_2026-11-23">120</sector_teeth>
+      <module unit="mm" status="design">2</module>
+      <pinion_teeth status="design">15</pinion_teeth>
+      <gearbox_ratio status="design" src="planetary gearmotor">10</gearbox_ratio>
+      <torque_at_bar unit="N.m" status="derived" src="actuator_options_2026-11-23: about 128 N.m">128</torque_at_bar>
+    </yaw_drive>
+  </drawbar>
+
+  <!-- ===== Hinge chain: pin, roll swivel, pin. Used on the drawbar AND at every cable hitch point. ===== -->
+  <hinge_chain id="default">
+    <axes status="design" src="Subdesigns/Shaftmodel.xml">Y_pin X_swivel Z_pin</axes>
+    <pin_limit unit="deg" status="design" src="sim coupling_yaw_range_deg">85</pin_limit>
+    <swivel_range unit="deg" status="model" src="configs/VariableDrawbarController.toml coupling_swivel_range_deg">45</swivel_range>
+    <swivel_singularity unit="deg" status="derived" src="geometry of the swivel">90</swivel_singularity>
+    <!-- The two clevis pins are 158 mm apart, so the ball is NOT a point. bar_geometry.hitch_transform must use this
+         (about 54 mm of error at 20 deg pitch if it treats the hitch as a point). Now included in the hitch kinematics and the
+         sim (commit 2d8db9c). -->
+    <pin_spacing unit="m" status="design" src="Balljoint part.fcmacro">0.158</pin_spacing>
+    <!-- Worst pin angles from the kinematic check with the rods locked against rotation. The 85 deg pin limit and the
+         90 deg swivel singularity leave plenty of margin. -->
+    <worst_case status="derived" src="scratchpad ball_freedom.py (actuator_options_2026-11-23)">
+      <pitch unit="deg">25</pitch>
+      <yaw unit="deg">40</yaw>
+      <swivel unit="deg">25</swivel>
+    </worst_case>
+  </hinge_chain>
+
+  <!-- ===== The cable ===== -->
+  <cable>
+    <diameter unit="m" status="design" src="user, 2026-11-25">0.003</diameter>
+    <preload_offset unit="m" status="model" src="configs/common.toml cable_preload_offset_m">0.002</preload_offset>
+    <!-- 10 x diameter is a rule of thumb for steel rope. The real figure depends on the construction. -->
+    <min_bend_radius unit="m" status="estimate" src="10 x diameter">0.030</min_bend_radius>
+    <!-- Steel 7x7 versus Dyneema changes the sheave size, the stiffness and the stretch. -->
+    <construction status="tbd"/>
+    <breaking_load unit="N" status="tbd"/>
+    <!-- Fill from the bar load run (configs/test/t_walk_cable_load.toml, then python cable_sizing.py LOG).
+         The stored sim_test_log.csv (1.05 m/s, anchors 240/165 mm) gave about 758 N peak, but it is a return-leg
+         jackknife run, so it probably overstates the real load. Do not size from it. -->
+    <working_tension>
+      <nominal unit="N" status="tbd"/>
+      <peak unit="N" status="tbd"/>
+    </working_tension>
+  </cable>
+
+  <!-- ===== Strain gauge at the hitch (passive) end of each cable ===== -->
+  <strain_gauge id="sg_hitch">
+    <location status="design">hitch end of cable</location>
+    <retention status="design" src="user">two ring nuts</retention>
+    <model status="tbd"/>
+    <capacity unit="N" status="tbd"/>
+    <!-- Tension accuracy may matter more than cable length accuracy if the controller trims length to hold tension. -->
+    <accuracy unit="N" status="tbd"/>
+  </strain_gauge>
+
+  <!-- ===== One hitch = the four cables between two neighbouring trailers. Repeated for every trailer pair. ===== -->
+  <hitch>
+    <!-- Cable anchors sit beside and above/below the drawbar axis. Planned 200 mm either side and 150 mm above and below.
+         The sim config (configs/common.toml) still has 0.24 and 0.165; t_walk_cable_load overrides to 0.20 and 0.15.
+         Signs match telemetry_pack.CORNER_SIGNS: lateral +1 = left, vertical +1 = top. -->
+    <cable_line id="tl" lateral_sign="1" vertical_sign="1"/>
+    <cable_line id="tr" lateral_sign="-1" vertical_sign="1"/>
+    <cable_line id="bl" lateral_sign="1" vertical_sign="-1"/>
+    <cable_line id="br" lateral_sign="-1" vertical_sign="-1"/>
+    <anchor_lateral_offset unit="m" status="design" src="user, 2026-11-25: 200 mm from the drawbar centre">0.200</anchor_lateral_offset>
+    <anchor_vertical_offset unit="m" status="design" src="user, 2026-11-25: +-150 mm from the drawbar">0.150</anchor_vertical_offset>
+
+    <!-- Passive end (trailer B): pin, roll swivel, pin on each cable, then the strain gauge with its two ring nuts. -->
+    <passive_end>
+      <chain ref="default"/>
+      <strain_gauge ref="sg_hitch"/>
+      <anchor_trailer>B</anchor_trailer>
+      <!-- Position along the bar axis in the trailer B chassis frame, for each cable line. -->
+      <position_x unit="m" status="tbd"/>
+    </passive_end>
+
+    <!-- Active end (trailer A): one motor-driven drum per cable. -->
+    <active_end>
+      <!-- "drum" = anchored, wound cable, length is rotation x radius. "capstan" = friction drive, slips, needs a tail
+           tensioner. Drum chosen so that rotation gives length directly. -->
+      <type status="design">drum</type>
+      <!-- At least twice the cable bend radius, so 60 mm or more. -->
+      <drum_dia unit="m" status="tbd"/>
+      <groove_pitch unit="m" status="tbd"/>
+      <!-- Where the cable leaves the drum, in the trailer A frame. Leaves tangent to the groove. Unit vector for the
+           direction. There is no standard point: it is a design parameter, and it feeds the cable length calculation. -->
+      <exit_point cable="tl" status="tbd"/>
+      <exit_point cable="tr" status="tbd"/>
+      <exit_point cable="bl" status="tbd"/>
+      <exit_point cable="br" status="tbd"/>
+      <!-- Under about 1.5 deg on a grooved drum, up to 2-3 deg on a smooth one. -->
+      <max_fleet_angle unit="deg" status="estimate" src="rule of thumb">1.5</max_fleet_angle>
+      <!-- Two redirect pulleys are proposed. A bell mouth only suits roughly +-20 deg of exit angle; the hitch needs more
+           (about 40 deg yaw plus pitch), so a swivelling pulley is the likelier exit. Open item. -->
+      <redirect_pulleys count="2" status="estimate" src="user proposal 2026-11-25">
+        <efficiency_each>0.97</efficiency_each>
+        <min_diameter unit="m">0.060</min_diameter>
+      </redirect_pulleys>
+      <actuator status="tbd"/>
+      <!-- Assumed to be on the motor shaft. That measures drum rotation, not cable length: fine on an anchored drum with
+           one layer of wraps, but stretch and pulley backlash then sit outside the loop. Open item. -->
+      <position_sensor location="motor_shaft" status="assumed"/>
+      <!-- Needed only down the rows (near-straight hitch angles); the turn can be coarser. Per cable. First-order estimate
+           from [tracking] below, NOT yet checked in the sim: compare joint[N]/cable_[corner]_err_mm with the lateral
+           tracking error in a run. The earlier +-0.5 mm was only an estimate (actuator_options_2026-11-23), not from a
+           control response. -->
+      <position_accuracy unit="m" status="estimate" src="derivation in tracking below">0.001</position_accuracy>
+      <!-- Sizing inputs for the drum and motor: fill from t_walk_cable_load via cable_sizing.py. The old log
+           (1.05 m/s, anchors 240/165 mm, jackknife run) gave about 0.84 m/s peak and 0.69 m of travel, which is far
+           above my first estimates of 0.3 m/s and 0.4 m. Treat as an upper bound only. -->
+      <cable_speed_peak unit="m/s" status="tbd"/>
+      <cable_travel unit="m" status="tbd"/>
+    </active_end>
+  </hitch>
+
+  <!-- ===== Vehicle ===== -->
+  <vehicle>
+    <!-- Walking pace 4 km/h plus 10 percent. -->
+    <cruise_speed unit="m/s" status="design" src="user, 2026-11-25: 4.4 km/h">1.22</cruise_speed>
+  </vehicle>
+
+  <!-- ===== Trailer position requirement ===== -->
+  <tracking>
+    <!-- The tight figure applies ONLY while travelling down the rows (cutters working beside the trees). The U-turn at the
+         row end has no such limit. -->
+    <in_row_position_tol unit="m" status="design" src="user, 2026-11-25: +-15 mm to keep the cutters clear of the trees">0.015</in_row_position_tol>
+    <!-- The alternative under discussion: what it replaces or allows still needs writing down. -->
+    <alternative_position_tol unit="m" status="assumed" src="user, 2026-11-25: the 300 mm alternative being discussed">0.300</alternative_position_tol>
+    <!-- Share of the +-15 mm budget that cable length error may use. First-order geometry:
+           hitch yaw error = cable length error / (2 x 0.20 m lever) = 2.5 mrad per mm
+           the next trailer is about 1.25 m from the hitch (bar plus half a chassis), so about 3 mm of position per mm
+           of cable error. 1 mm per cable therefore costs about 3 mm of the 15 mm, and errors add along the chain. -->
+    <cable_error_budget_share status="estimate">0.2</cable_error_budget_share>
+  </tracking>
+
+  <!-- ===== Simulator notes ===== -->
+  <sim>
+    <reverse_wheel_sign_fixed status="design" src="handoff_2026-11-22">true</reverse_wheel_sign_fixed>
+    <!-- The planner assumes two equal bars and a point hitch; it needs the three-part drawbar version
+         (planner_hitch_model = "three_part" exists but is flag-gated; see the README changelog). -->
+  </sim>
+
+</design>

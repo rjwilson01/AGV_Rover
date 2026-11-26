@@ -1,4 +1,4 @@
-"""Cable-actuator sizing numbers from a run log (for design.toml and the motor / drum choice).
+"""Cable-actuator sizing numbers from a run log (for design.xml and the motor / drum choice).
 
     python cable_sizing.py [sim_test_log.csv] [--drum-dia-mm 60] [--seg SEGMENT]
 
@@ -93,7 +93,7 @@ def main() -> None:
             if name in h:
                 print(f"  {name}: {h[name]['min_N']:.1f} .. {h[name]['max_N']:.1f} N")
     print(f"worst case over all cables: tension {worst['tension_peak_N']:.1f} N, travel {worst['travel_mm']:.0f} mm, "
-          f"speed {worst['speed_peak_mps']:.3f} m/s   (-> design.toml [cable] / [[active_end]])")
+          f"speed {worst['speed_peak_mps']:.3f} m/s   (-> design.xml: cable working_tension, hitch/active_end cable_speed_peak and cable_travel)")
     if not any("bar_axial_true_N" in h or "bar_axial_N" in h for h in s["hitches"].values()):
         print("note: no bar load channel in this log; run t_walk_cable_load (sets loadcell.bar_enabled = true)")
 

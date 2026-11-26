@@ -122,7 +122,7 @@
     <passive_end>
       <chain ref="default"/>
       <strain_gauge ref="sg_hitch"/>
-      <anchor_trailer>B</anchor_trailer>
+      <anchor_trailer status="design">B</anchor_trailer>
       <!-- Position along the bar axis in the trailer B chassis frame, for each cable line. -->
       <position_x unit="m" status="tbd"/>
     </passive_end>

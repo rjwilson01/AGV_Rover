@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AGV Rover design</title><style>
+:root{--bg:#fff;--fg:#1c1f23;--mut:#677;--line:#d8dde3;--head:#eef1f5;--note:#f7f8fa;--tbdbg:#fff4f2;
+--design:#1d7a46;--model:#1f5fbf;--assumed:#a15c00;--estimate:#8a4fb0;--derived:#0b7a85;--tbd:#b3261e}
+@media(prefers-color-scheme:dark){:root{--bg:#15181c;--fg:#e6e9ed;--mut:#98a2ad;--line:#2d343c;--head:#20262d;--note:#1b2025;--tbdbg:#2a1a19;
+--design:#5fcf8c;--model:#7fb0ff;--assumed:#f0b45a;--estimate:#c79bea;--derived:#5fd0da;--tbd:#ff8a80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}
+main{max-width:70rem;margin:0 auto;padding:1.5rem 16px 3rem}
+h1{font-size:1.5rem;margin:.2rem 0}h2{font-size:1.1rem;margin:2rem 0 .5rem}
+.sub{color:var(--mut);margin:0 0 1rem}.legend{display:flex;flex-wrap:wrap;gap:.4rem .9rem;margin:.6rem 0 1rem}
+.legend span.m{color:var(--mut);font-size:.85rem}
+.b{display:inline-block;padding:0 .5rem;border-radius:.7rem;border:1px solid currentColor;font-size:.78rem;font-weight:600}
+.b.design{color:var(--design)}.b.model{color:var(--model)}.b.assumed{color:var(--assumed)}
+.b.estimate{color:var(--estimate)}.b.derived{color:var(--derived)}.b.tbd{color:var(--tbd)}
+.wrap{overflow-x:auto;border:1px solid var(--line);border-radius:.4rem}
+table{border-collapse:collapse;width:100%;min-width:42rem}
+td,th{padding:.28rem .6rem;border-top:1px solid var(--line);vertical-align:top;text-align:left}
+th{background:var(--head);border-top:0;font-size:.85rem}
+tr.head td{background:var(--head);font-weight:600}tr.note td{background:var(--note);color:var(--mut);font-size:.88rem}
+tr.tbd td{background:var(--tbdbg)}.val{font-variant-numeric:tabular-nums;font-weight:600}
+.muted{color:var(--mut);font-weight:400}.unit{color:var(--mut)}.src{color:var(--mut);font-size:.85rem}
+ul.todo{columns:2;margin:.3rem 0;padding-left:1.2rem}@media(max-width:600px){ul.todo{columns:1}}
+.gen{color:var(--mut);font-size:.82rem;margin-top:2rem}
+</style></head>
+<body><main>
+<h1>AGV Rover design</h1>
+<p class="sub">Schema version 2. 20 design, 7 model, 4 assumed, 6 estimate, 5 derived, 17 tbd.</p>
+<div class="legend"><span><span class="b design">design</span> <span class="m">chosen or measured for the real build</span></span><span><span class="b model">model</span> <span class="m">value the simulator uses today; may differ from the build</span></span><span><span class="b assumed">assumed</span> <span class="m">placeholder to replace once the real part or number is known</span></span><span><span class="b estimate">estimate</span> <span class="m">first-order calculation or rule of thumb, not yet checked</span></span><span><span class="b derived">derived</span> <span class="m">computed from other values or from a stated script</span></span><span><span class="b tbd">tbd</span> <span class="m">unknown, to be filled in</span></span></div>
+<h2>To fill in (17)</h2>
+<ul class="todo"><li>cable/construction</li><li>cable/breaking_load</li><li>cable/working_tension/nominal</li><li>cable/working_tension/peak</li><li>strain_gauge [sg_hitch]/model</li><li>strain_gauge [sg_hitch]/capacity</li><li>strain_gauge [sg_hitch]/accuracy</li><li>hitch/passive_end/position_x</li><li>hitch/active_end/drum_dia</li><li>hitch/active_end/groove_pitch</li><li>hitch/active_end/exit_point [tl]</li><li>hitch/active_end/exit_point [tr]</li><li>hitch/active_end/exit_point [bl]</li><li>hitch/active_end/exit_point [br]</li><li>hitch/active_end/actuator</li><li>hitch/active_end/cable_speed_peak</li><li>hitch/active_end/cable_travel</li></ul>
+<h2>chassis</h2><p class="sub">Trailer chassis. The simulator uses a 0.9 x 0.5 m box.</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="item"><td style="padding-left:0.6rem">length</td><td class="val">0.9</td><td class="unit">m</td><td><span class="b model">model</span></td><td class="src">configs/common.toml [geometry] chassis_half_len_m x 2</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">width</td><td class="val">0.5</td><td class="unit">m</td><td><span class="b model">model</span></td><td class="src">configs/common.toml [geometry] chassis_half_width_m x 2</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Bars are measured from the chassis centre. 0.40 m from centre = 0.05 m inside the chassis end, which is the sim&#x27;s [bars] pivot_inset_m = 0.05. (design.toml called this &quot;inset&quot; but meant from centre.)</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">bar_pivot_from_centre</td><td class="val">0.40</td><td class="unit">m</td><td><span class="b model">model</span></td><td class="src">handoff_2026-11-22 (turning limits)</td></tr>
+</tbody></table></div>
+<h2>drawbar</h2><p class="sub">Drawbar: a tube that yaws on a vertical pivot at the trailer edge, with a linear actuator inside.</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="item"><td style="padding-left:0.6rem">tube_od</td><td class="val">0.044</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">actuator_options_2026-11-23 (current tube)</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">tube_bore</td><td class="val">0.0376</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">actuator_options_2026-11-23</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">The 42 mm stepper and 46 mm S200 actuators do NOT fit this 37.6 mm bore, so the tube or the actuator placement changes. Open item.</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">0.8 to 1.0 m is the short-bar test range in the sim. The new three-part design is N to N + half a trailer length.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">length_min</td><td class="val">0.8</td><td class="unit">m</td><td><span class="b model">model</span></td><td class="src">configs/test/t_short_bars.toml; handoff_2026-11-22</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">length_max</td><td class="val">1.0</td><td class="unit">m</td><td><span class="b model">model</span></td><td class="src">configs/test/t_short_bars.toml</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">yaw_limit</td><td class="val">85</td><td class="unit">deg</td><td><span class="b design">design</span></td><td class="src">actuator_options_2026-11-23: mechanical stop, either side of straight</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">The drawbar.fcmacro placeholders: replace with the real clevis eye once the actuator is chosen.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">pin_dia</td><td class="val">0.012</td><td class="unit">m</td><td><span class="b assumed">assumed</span></td><td class="src">drawbar.fcmacro</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">fork_gap</td><td class="val">0.014</td><td class="unit">m</td><td><span class="b assumed">assumed</span></td><td class="src">drawbar.fcmacro</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Yaw drive replaced the pull-pull cable drive, whose lever arm reached zero near 48 deg.</td></tr>
+<tr class="head"><td style="padding-left:0.6rem">yaw_drive<span class="muted"> type=sector_gear</span></td><td></td><td></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">sector_teeth</td><td class="val">120</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src">actuator_options_2026-11-23</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">module</td><td class="val">2</td><td class="unit">mm</td><td><span class="b design">design</span></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">pinion_teeth</td><td class="val">15</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">gearbox_ratio</td><td class="val">10</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src">planetary gearmotor</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">torque_at_bar</td><td class="val">128</td><td class="unit">N.m</td><td><span class="b derived">derived</span></td><td class="src">actuator_options_2026-11-23: about 128 N.m</td></tr>
+</tbody></table></div>
+<h2>hinge_chain [default]</h2><p class="sub">Hinge chain: pin, roll swivel, pin. Used on the drawbar AND at every cable hitch point.</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="item"><td style="padding-left:0.6rem">axes</td><td class="val">Y_pin X_swivel Z_pin</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src">Subdesigns/Shaftmodel.xml</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">pin_limit</td><td class="val">85</td><td class="unit">deg</td><td><span class="b design">design</span></td><td class="src">sim coupling_yaw_range_deg</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">swivel_range</td><td class="val">45</td><td class="unit">deg</td><td><span class="b model">model</span></td><td class="src">configs/VariableDrawbarController.toml coupling_swivel_range_deg</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">swivel_singularity</td><td class="val">90</td><td class="unit">deg</td><td><span class="b derived">derived</span></td><td class="src">geometry of the swivel</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">The two clevis pins are 158 mm apart, so the ball is NOT a point. bar_geometry.hitch_transform must use this (about 54 mm of error at 20 deg pitch if it treats the hitch as a point). Now included in the hitch kinematics and the sim (commit 2d8db9c).</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">pin_spacing</td><td class="val">0.158</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">Balljoint part.fcmacro</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Worst pin angles from the kinematic check with the rods locked against rotation. The 85 deg pin limit and the 90 deg swivel singularity leave plenty of margin.</td></tr>
+<tr class="head"><td style="padding-left:0.6rem">worst_case<span class="muted"></span></td><td></td><td></td><td><span class="b derived">derived</span></td><td class="src">scratchpad ball_freedom.py (actuator_options_2026-11-23)</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">pitch</td><td class="val">25</td><td class="unit">deg</td><td><span class="b derived">derived</span></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">yaw</td><td class="val">40</td><td class="unit">deg</td><td><span class="b derived">derived</span></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">swivel</td><td class="val">25</td><td class="unit">deg</td><td><span class="b derived">derived</span></td><td class="src"></td></tr>
+</tbody></table></div>
+<h2>cable</h2><p class="sub">The cable</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="item"><td style="padding-left:0.6rem">diameter</td><td class="val">0.003</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">user, 2026-11-25</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">preload_offset</td><td class="val">0.002</td><td class="unit">m</td><td><span class="b model">model</span></td><td class="src">configs/common.toml cable_preload_offset_m</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">10 x diameter is a rule of thumb for steel rope. The real figure depends on the construction.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">min_bend_radius</td><td class="val">0.030</td><td class="unit">m</td><td><span class="b estimate">estimate</span></td><td class="src">10 x diameter</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Steel 7x7 versus Dyneema changes the sheave size, the stiffness and the stretch.</td></tr>
+<tr class="item tbd"><td style="padding-left:0.6rem">construction</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:0.6rem">breaking_load</td><td class="val"><span class="muted">TBD</span></td><td class="unit">N</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Fill from the bar load run (configs/test/t_walk_cable_load.toml, then python cable_sizing.py LOG). The stored sim_test_log.csv (1.05 m/s, anchors 240/165 mm) gave about 758 N peak, but it is a return-leg jackknife run, so it probably overstates the real load. Do not size from it.</td></tr>
+<tr class="head"><td style="padding-left:0.6rem">working_tension<span class="muted"></span></td><td></td><td></td><td></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">nominal</td><td class="val"><span class="muted">TBD</span></td><td class="unit">N</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">peak</td><td class="val"><span class="muted">TBD</span></td><td class="unit">N</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+</tbody></table></div>
+<h2>strain_gauge [sg_hitch]</h2><p class="sub">Strain gauge at the hitch (passive) end of each cable</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="item"><td style="padding-left:0.6rem">location</td><td class="val">hitch end of cable</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:0.6rem">retention</td><td class="val">two ring nuts</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src">user</td></tr>
+<tr class="item tbd"><td style="padding-left:0.6rem">model</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:0.6rem">capacity</td><td class="val"><span class="muted">TBD</span></td><td class="unit">N</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Tension accuracy may matter more than cable length accuracy if the controller trims length to hold tension.</td></tr>
+<tr class="item tbd"><td style="padding-left:0.6rem">accuracy</td><td class="val"><span class="muted">TBD</span></td><td class="unit">N</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+</tbody></table></div>
+<h2>hitch</h2><p class="sub">One hitch = the four cables between two neighbouring trailers. Repeated for every trailer pair.</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Cable anchors sit beside and above/below the drawbar axis. Planned 200 mm either side and 150 mm above and below. The sim config (configs/common.toml) still has 0.24 and 0.165; t_walk_cable_load overrides to 0.20 and 0.15. Signs match telemetry_pack.CORNER_SIGNS: lateral +1 = left, vertical +1 = top.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">cable_line [tl]</td><td class="val">lateral_sign=1, vertical_sign=1</td><td class="unit"></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:0.6rem">cable_line [tr]</td><td class="val">lateral_sign=-1, vertical_sign=1</td><td class="unit"></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:0.6rem">cable_line [bl]</td><td class="val">lateral_sign=1, vertical_sign=-1</td><td class="unit"></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:0.6rem">cable_line [br]</td><td class="val">lateral_sign=-1, vertical_sign=-1</td><td class="unit"></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:0.6rem">anchor_lateral_offset</td><td class="val">0.200</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">user, 2026-11-25: 200 mm from the drawbar centre</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">anchor_vertical_offset</td><td class="val">0.150</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">user, 2026-11-25: +-150 mm from the drawbar</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Passive end (trailer B): pin, roll swivel, pin on each cable, then the strain gauge with its two ring nuts.</td></tr>
+<tr class="head"><td style="padding-left:0.6rem">passive_end<span class="muted"></span></td><td></td><td></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">chain [default]</td><td class="val"></td><td class="unit"></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">strain_gauge [sg_hitch]</td><td class="val"></td><td class="unit"></td><td></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:1.7rem">anchor_trailer</td><td class="val">B</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Position along the bar axis in the trailer B chassis frame, for each cable line.</td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">position_x</td><td class="val"><span class="muted">TBD</span></td><td class="unit">m</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Active end (trailer A): one motor-driven drum per cable.</td></tr>
+<tr class="head"><td style="padding-left:0.6rem">active_end<span class="muted"></span></td><td></td><td></td><td></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">&quot;drum&quot; = anchored, wound cable, length is rotation x radius. &quot;capstan&quot; = friction drive, slips, needs a tail tensioner. Drum chosen so that rotation gives length directly.</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">type</td><td class="val">drum</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">At least twice the cable bend radius, so 60 mm or more.</td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">drum_dia</td><td class="val"><span class="muted">TBD</span></td><td class="unit">m</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">groove_pitch</td><td class="val"><span class="muted">TBD</span></td><td class="unit">m</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Where the cable leaves the drum, in the trailer A frame. Leaves tangent to the groove. Unit vector for the direction. There is no standard point: it is a design parameter, and it feeds the cable length calculation.</td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">exit_point [tl]</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">exit_point [tr]</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">exit_point [bl]</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">exit_point [br]</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Under about 1.5 deg on a grooved drum, up to 2-3 deg on a smooth one.</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">max_fleet_angle</td><td class="val">1.5</td><td class="unit">deg</td><td><span class="b estimate">estimate</span></td><td class="src">rule of thumb</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Two redirect pulleys are proposed. A bell mouth only suits roughly +-20 deg of exit angle; the hitch needs more (about 40 deg yaw plus pitch), so a swivelling pulley is the likelier exit. Open item.</td></tr>
+<tr class="head"><td style="padding-left:1.7rem">redirect_pulleys<span class="muted"> count=2</span></td><td></td><td></td><td><span class="b estimate">estimate</span></td><td class="src">user proposal 2026-11-25</td></tr>
+<tr class="item"><td style="padding-left:2.8rem">efficiency_each</td><td class="val">0.97</td><td class="unit"></td><td><span class="b estimate">estimate</span></td><td class="src"></td></tr>
+<tr class="item"><td style="padding-left:2.8rem">min_diameter</td><td class="val">0.060</td><td class="unit">m</td><td><span class="b estimate">estimate</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">actuator</td><td class="val"><span class="muted">TBD</span></td><td class="unit"></td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Assumed to be on the motor shaft. That measures drum rotation, not cable length: fine on an anchored drum with one layer of wraps, but stretch and pulley backlash then sit outside the loop. Open item.</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">position_sensor</td><td class="val">location=motor_shaft</td><td class="unit"></td><td><span class="b assumed">assumed</span></td><td class="src"></td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Needed only down the rows (near-straight hitch angles); the turn can be coarser. Per cable. First-order estimate from [tracking] below, NOT yet checked in the sim: compare joint[N]/cable_[corner]_err_mm with the lateral tracking error in a run. The earlier +-0.5 mm was only an estimate (actuator_options_2026-11-23), not from a control response.</td></tr>
+<tr class="item"><td style="padding-left:1.7rem">position_accuracy</td><td class="val">0.001</td><td class="unit">m</td><td><span class="b estimate">estimate</span></td><td class="src">derivation in tracking below</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:1.7rem">Sizing inputs for the drum and motor: fill from t_walk_cable_load via cable_sizing.py. The old log (1.05 m/s, anchors 240/165 mm, jackknife run) gave about 0.84 m/s peak and 0.69 m of travel, which is far above my first estimates of 0.3 m/s and 0.4 m. Treat as an upper bound only.</td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">cable_speed_peak</td><td class="val"><span class="muted">TBD</span></td><td class="unit">m/s</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+<tr class="item tbd"><td style="padding-left:1.7rem">cable_travel</td><td class="val"><span class="muted">TBD</span></td><td class="unit">m</td><td><span class="b tbd">tbd</span></td><td class="src"></td></tr>
+</tbody></table></div>
+<h2>vehicle</h2><p class="sub">Vehicle</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Walking pace 4 km/h plus 10 percent.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">cruise_speed</td><td class="val">1.22</td><td class="unit">m/s</td><td><span class="b design">design</span></td><td class="src">user, 2026-11-25: 4.4 km/h</td></tr>
+</tbody></table></div>
+<h2>tracking</h2><p class="sub">Trailer position requirement</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">The tight figure applies ONLY while travelling down the rows (cutters working beside the trees). The U-turn at the row end has no such limit.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">in_row_position_tol</td><td class="val">0.015</td><td class="unit">m</td><td><span class="b design">design</span></td><td class="src">user, 2026-11-25: +-15 mm to keep the cutters clear of the trees</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">The alternative under discussion: what it replaces or allows still needs writing down.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">alternative_position_tol</td><td class="val">0.300</td><td class="unit">m</td><td><span class="b assumed">assumed</span></td><td class="src">user, 2026-11-25: the 300 mm alternative being discussed</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">Share of the +-15 mm budget that cable length error may use. First-order geometry: hitch yaw error = cable length error / (2 x 0.20 m lever) = 2.5 mrad per mm the next trailer is about 1.25 m from the hitch (bar plus half a chassis), so about 3 mm of position per mm of cable error. 1 mm per cable therefore costs about 3 mm of the 15 mm, and errors add along the chain.</td></tr>
+<tr class="item"><td style="padding-left:0.6rem">cable_error_budget_share</td><td class="val">0.2</td><td class="unit"></td><td><span class="b estimate">estimate</span></td><td class="src"></td></tr>
+</tbody></table></div>
+<h2>sim</h2><p class="sub">Simulator notes</p><div class="wrap"><table><thead><tr><th>Item</th><th>Value</th><th>Unit</th><th>Status</th><th>Source</th></tr></thead><tbody>
+<tr class="item"><td style="padding-left:0.6rem">reverse_wheel_sign_fixed</td><td class="val">true</td><td class="unit"></td><td><span class="b design">design</span></td><td class="src">handoff_2026-11-22</td></tr>
+<tr class="note"><td colspan="5" style="padding-left:0.6rem">The planner assumes two equal bars and a point hitch; it needs the three-part drawbar version (planner_hitch_model = &quot;three_part&quot; exists but is flag-gated; see the README changelog).</td></tr>
+</tbody></table></div>
+<p class="gen">AUTO-GENERATED from design.xml by make_design_html.py (make design). Edit the XML, not this page.</p>
+</main></body></html>
